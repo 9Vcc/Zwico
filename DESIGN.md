@@ -330,6 +330,18 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 
 对应的关注列表（`watched`）本身是纯配置：勾选与保存不产生任何系统写入，只有点"建立关联"才写注册表。
 
+### D36 · UserChoice 的优先级，与「为何不改写它」
+
+**机制事实**（本设计依赖）：Windows 双击文件时按 `FileExts\<ext>\UserChoice` → `Classes\<ext>` 默认值 的顺序解析打开方式。
+
+- `UserChoice` 是系统「默认应用」里用户的选择，带 **Hash 完整性校验**（Hash 由用户 SID + 扩展名 + ProgID + 键的 LastWriteTime 计算）。程序写入时若不重算 Hash，Windows 会**忽略甚至重置**该扩展名的关联。
+- 因此 `register.rs` 写入的 `Classes\<ext>` 关联，**在 `UserChoice` 存在时不生效** —— 这正是"注册成功却看不到效果"的原因。列表也不会收录该扩展名，因为枚举用的"实际生效 ProgID"以 UserChoice 为准（D2）。
+- **本工具的选择：不改写它，改为把事实告诉用户**。
+  - `inspect_extension` 报告每个扩展名的真实状态（谁在生效、UserChoice 是否挡在前面）；
+  - 设置页把状态可视化（绿 = 已生效 / 黄 = 被覆盖）并给出统计；
+  - 提供 `open_default_apps_settings` 一键打开系统「默认应用」页 —— 那是唯一官方支持、能真正改变默认打开方式的途径（Windows 11 支持按应用批量设置）。
+- 已评估但暂不做：自行实现 Hash 算法（MD5 + `NtSetInformationKey` 设置键的 LastWriteTime）直接改写 UserChoice。技术上可行（第三方工具如 SetUserFTA 长期使用），但风险高（写错会破坏用户既有选择）、且需要未文档化 API，属于需要用户明确决策的事项。
+
 ---
 
 ## 5. 已知限制
