@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 
-import { APP_VERSION, CHANNELS, type ZedInstallation } from "../api";
+import { APP_VERSION, CHANNELS, type ExtStatus, type ZedInstallation } from "../api";
 import { baseName } from "../lib/iconInfo";
 import { t, type LangPref } from "../lib/i18n";
 import { Select } from "./Select";
@@ -60,6 +60,7 @@ export function SettingsPage({
   perExtensionCount,
   customDir,
   watched,
+  extStatus,
   viewport,
   onBack,
   onThemeChange,
@@ -78,6 +79,7 @@ export function SettingsPage({
   onAddWatched,
   onClearWatched,
   onRegisterWatched,
+  onOpenDefaultApps,
 }: {
   theme: "dark" | "light";
   lang: LangPref;
@@ -93,6 +95,8 @@ export function SettingsPage({
   customDir: string;
   /** 关注列表：常用扩展名 */
   watched: string[];
+  /** 关注项的关联状态（诊断"为什么注册了没生效"） */
+  extStatus: Record<string, ExtStatus>;
   /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
   viewport: { width: number; height: number };
   onBack: () => void;
@@ -112,6 +116,7 @@ export function SettingsPage({
   onAddWatched: (exts: string[]) => void;
   onClearWatched: () => void;
   onRegisterWatched: () => void;
+  onOpenDefaultApps: () => void;
 }) {
   const [customInput, setCustomInput] = useState("");
   const [customHint, setCustomHint] = useState("");
@@ -130,6 +135,18 @@ export function SettingsPage({
     );
     setCustomInput("");
   };
+
+  /** 关注项的状态统计：已生效 / 被系统默认程序覆盖 / 未关联 */
+  const statusCounts = watched.reduce(
+    (acc, ext) => {
+      const status = extStatus[ext];
+      if (status?.effectiveIsZed) acc.active += 1;
+      else if (status?.classesRegistered) acc.blocked += 1;
+      else acc.none += 1;
+      return acc;
+    },
+    { active: 0, blocked: 0, none: 0 },
+  );
 
   return (
     <div className="settings">
@@ -326,17 +343,36 @@ export function SettingsPage({
                   </button>
                 </div>
                 <div className="ext-grid">
-                  {group.exts.map((ext) => (
-                    <button
-                      key={ext}
-                      type="button"
-                      className={`ext-chip${watched.includes(ext) ? " ext-chip--on" : ""}`}
-                      aria-pressed={watched.includes(ext)}
-                      onClick={() => onToggleWatched(ext)}
-                    >
-                      {ext}
-                    </button>
-                  ))}
+                  {group.exts.map((ext) => {
+                    const isWatched = watched.includes(ext);
+                    const status = extStatus[ext];
+                    const statusClass = !isWatched
+                      ? ""
+                      : status?.effectiveIsZed
+                        ? " ext-chip--ok"
+                        : status?.hasUserChoice && status?.classesRegistered
+                          ? " ext-chip--blocked"
+                          : "";
+                    const statusTip = !isWatched
+                      ? undefined
+                      : status?.effectiveIsZed
+                        ? t("watch.status.active.tip")
+                        : status?.hasUserChoice && status?.classesRegistered
+                          ? t("watch.status.blocked.tip")
+                          : t("watch.status.none.tip");
+                    return (
+                      <button
+                        key={ext}
+                        type="button"
+                        className={`ext-chip${isWatched ? " ext-chip--on" : ""}${statusClass}`}
+                        aria-pressed={isWatched}
+                        data-tip={statusTip}
+                        onClick={() => onToggleWatched(ext)}
+                      >
+                        {ext}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -354,6 +390,37 @@ export function SettingsPage({
                 </button>
               </div>
             </div>
+
+            {/* 状态诊断：解释"为什么注册了却没生效" */}
+            {watched.length > 0 ? (
+              <div className="watch-status">
+                <div className="watch-status__row">
+                  <Pill tone="ok">
+                    {t("watch.status.active")} {statusCounts.active}
+                  </Pill>
+                  {statusCounts.blocked > 0 ? (
+                    <Pill tone="warn">
+                      {t("watch.status.blocked")} {statusCounts.blocked}
+                    </Pill>
+                  ) : null}
+                  {statusCounts.none > 0 ? (
+                    <Pill tone="muted">
+                      {t("watch.status.none")} {statusCounts.none}
+                    </Pill>
+                  ) : null}
+                </div>
+                <p className="card__note">{t("watch.explain")}</p>
+                <button
+                  type="button"
+                  className="btn btn--wide"
+                  data-tip={t("watch.openSettings.tip")}
+                  onClick={onOpenDefaultApps}
+                >
+                  <IconFolder size={13} />
+                  {t("watch.openSettings")}
+                </button>
+              </div>
+            ) : null}
 
             <button
               type="button"

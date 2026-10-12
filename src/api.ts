@@ -37,6 +37,8 @@ export interface Association {
   hasDefaultIcon: boolean;
   currentIcon: string | null;
   iconState: IconState;
+  /** 生效 ProgID 的来源：userChoice（系统默认程序，程序不可改）/ classesDefault / progIdOnly */
+  progIdSource: "userChoice" | "classesDefault" | "progIdOnly";
 }
 
 export type LogLevel = "info" | "warn" | "error";
@@ -82,6 +84,18 @@ export interface UndoStatus {
   count: number;
 }
 
+/** 单个扩展名的关联状态（设置页诊断用） */
+export interface ExtStatus {
+  extension: string;
+  effectiveProgId: string | null;
+  /** 实际生效的关联是否指向本通道 Zed */
+  effectiveIsZed: boolean;
+  /** 系统「默认应用」里是否已指定该扩展名的打开方式（存在时本工具的注册不生效） */
+  hasUserChoice: boolean;
+  /** Classes\<ext> 默认值是否已指向本通道 */
+  classesRegistered: boolean;
+}
+
 /** 自动扫描到的 Zed 安装 */
 export interface ZedInstallation {
   path: string;
@@ -105,6 +119,11 @@ export const api = {
   /** 为扩展名建立 Zed 关联（改变打开方式，需用户显式触发） */
   registerExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
     invoke<LogLine[]>("register_extensions", { channel, extensions, zedPath }),
+  /** 检查扩展名的关联状态（只读） */
+  inspectExtensions: (channel: ChannelKey, extensions: string[]) =>
+    invoke<ExtStatus[]>("inspect_extensions", { channel, extensions }),
+  /** 打开 Windows 的「默认应用」设置页 */
+  openDefaultAppsSettings: () => invoke<void>("open_default_apps_settings"),
   refreshExplorer: (clearCache: boolean, restartExplorer: boolean) =>
     invoke<LogLine[]>("refresh_explorer", { clearCache, restartExplorer }),
   undoStatus: () => invoke<UndoStatus>("undo_status"),

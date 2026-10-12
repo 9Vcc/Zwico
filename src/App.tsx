@@ -234,6 +234,7 @@ export default function App() {
           perExtensionCount={Object.keys(store.perExtension).length}
           customDir={store.customDir}
           watched={store.watched}
+          extStatus={store.extStatus}
           viewport={viewport}
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
@@ -252,6 +253,7 @@ export default function App() {
           onAddWatched={store.addWatched}
           onClearWatched={store.clearWatched}
           onRegisterWatched={() => store.setDialog("register")}
+          onOpenDefaultApps={() => void store.openDefaultApps()}
         />
       ) : (
       <div className="main">

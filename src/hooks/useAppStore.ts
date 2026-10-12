@@ -20,6 +20,7 @@ import {
   type LogLine,
   type ProgressPayload,
   type Target,
+  type ExtStatus,
   type UndoStatus,
   type ZedInstallation,
 } from "../api";
@@ -128,6 +129,8 @@ export function useAppStore() {
   /** 自动扫描到的 Zed 安装列表 */
   const [installations, setInstallations] = useState<ZedInstallation[]>([]);
   const [scanning, setScanning] = useState(false);
+  /** 关注列表各扩展名的关联状态（设置页诊断） */
+  const [extStatus, setExtStatus] = useState<Record<string, ExtStatus>>({});
   const previewRequested = useRef<Set<string>>(new Set());
   const { toasts, push, dismiss } = useToasts();
   const svgIcoTool = useSvgIco(push);
@@ -339,6 +342,37 @@ export function useAppStore() {
   const clearWatched = useCallback(() => {
     setConfig((prev) => ({ ...prev, watched: [] }));
   }, []);
+
+  /** 查询关注列表的关联状态：谁在生效、谁被系统默认程序挡住 */
+  const inspectWatched = useCallback(async () => {
+    if (watched.length === 0) {
+      setExtStatus({});
+      return;
+    }
+    try {
+      const list = await api.inspectExtensions(channel, watched);
+      const map: Record<string, ExtStatus> = {};
+      list.forEach((item) => {
+        map[item.extension] = item;
+      });
+      setExtStatus(map);
+    } catch {
+      // 诊断失败不影响主流程
+    }
+  }, [channel, watched]);
+
+  useEffect(() => {
+    void inspectWatched();
+  }, [inspectWatched]);
+
+  /** 打开系统「默认应用」设置页（唯一能真正改变默认打开方式的途径） */
+  const openDefaultApps = useCallback(async () => {
+    try {
+      await api.openDefaultAppsSettings();
+    } catch (err) {
+      fail("fail.openSettings", err);
+    }
+  }, [fail]);
 
   /** 为关注列表中的扩展名建立 Zed 关联（改变打开方式，需先经确认对话框） */
   const registerWatched = useCallback(async () => {
@@ -768,6 +802,7 @@ export function useAppStore() {
     restartExplorer,
     watched,
     watchedOnly,
+    extStatus,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -799,6 +834,7 @@ export function useAppStore() {
     toggleWatched,
     clearWatched,
     registerWatched,
+    openDefaultApps,
     setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,
     applyAll,

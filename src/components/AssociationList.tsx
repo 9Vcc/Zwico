@@ -177,6 +177,7 @@ function Row({
   const tip = [
     t("row.tip", [assoc.progId]),
     t("row.tip.icon", [detail]),
+    t("row.tip.source", [t(`sourceKind.${assoc.progIdSource}`)]),
     sharedCount > 0 ? t("row.tip.shared", [assoc.sharedWith.join(", ")]) : "",
   ]
     .filter(Boolean)

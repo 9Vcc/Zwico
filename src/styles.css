@@ -2003,6 +2003,33 @@ kbd {
   color: var(--accent);
 }
 
+/* 关注项的状态色：生效（绿）/ 被系统默认程序覆盖（黄） */
+.ext-chip--on.ext-chip--ok {
+  border-color: var(--ok-border);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.ext-chip--on.ext-chip--blocked {
+  border-color: var(--warn-border);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.watch-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--stroke);
+}
+
+.watch-status__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* 列表上方的关注项筛选 */
 .list-filter {
   display: flex;

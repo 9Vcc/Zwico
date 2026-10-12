@@ -18,6 +18,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: "imageres.dll,-102",
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "ts",
@@ -27,6 +28,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: "imageres.dll,-102",
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "tsx",
@@ -36,6 +38,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: false,
     currentIcon: null,
     iconState: "none",
+    progIdSource: "classesDefault",
   },
   {
     extension: "md",
@@ -45,6 +48,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "json",
@@ -54,6 +58,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "css",
@@ -63,6 +68,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "py",
@@ -72,6 +78,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\icons\\py.ico",0',
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "rs",
@@ -81,6 +88,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\icons\\rs.ico",0',
     iconState: "missing",
+    progIdSource: "classesDefault",
   },
   {
     extension: "go",
@@ -90,6 +98,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: '"D:\\old-zed\\zed.exe",0',
     iconState: "missing",
+    progIdSource: "classesDefault",
   },
   {
     extension: "sh",
@@ -99,6 +108,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: "imageres.dll,-74",
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
   {
     extension: "toml",
@@ -108,6 +118,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: false,
     currentIcon: null,
     iconState: "none",
+    progIdSource: "classesDefault",
   },
   {
     extension: "yaml",
@@ -117,6 +128,7 @@ const ASSOCIATIONS: Association[] = [
     hasDefaultIcon: true,
     currentIcon: "imageres.dll,-102",
     iconState: "valid",
+    progIdSource: "classesDefault",
   },
 ];
 
@@ -173,6 +185,16 @@ export function installDevMock(): boolean {
       log: [{ key: "log.reloaded", params: ["12"], level: "info" }],
     }),
     scanIcoCount: async () => 4,
+    // 模拟三种状态：已生效 / 被系统默认程序覆盖
+    inspectExtensions: async (_channel: string, extensions: string[]) =>
+      extensions.map((ext, index) => ({
+        extension: ext,
+        effectiveProgId: index % 3 === 0 ? `ZedG.${ext}` : "Python.File",
+        effectiveIsZed: index % 3 === 0,
+        hasUserChoice: index % 3 !== 0,
+        classesRegistered: true,
+      })),
+    openDefaultAppsSettings: async () => undefined,
     scanZedInstallations: async () => [
       {
         path: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",
