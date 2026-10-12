@@ -28,6 +28,10 @@ export default function App() {
   const store = useAppStore();
   const modeLabel = MODES.find((m) => m.key === store.mode)?.label ?? store.mode;
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
 
   // store 每轮渲染都是新对象，用 ref 持有以避免反复重绑监听
   const storeRef = useRef(store);
@@ -147,6 +151,7 @@ export default function App() {
   useEffect(() => {
     const onResize = () => {
       const current = storeRef.current;
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
       current.setSidebarWidth(current.sidebarWidth);
       current.setLogHeight(current.logHeight);
     };
@@ -223,6 +228,7 @@ export default function App() {
           scanning={store.scanning}
           perExtensionCount={Object.keys(store.perExtension).length}
           customDir={store.customDir}
+          viewport={viewport}
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
           onToggleLogCollapsed={store.toggleLogCollapsed}

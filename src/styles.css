@@ -187,7 +187,8 @@ body {
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  /* 第二行保底 180px：即使日志高度异常，主区（卡片区）也不会被挤到看不见 */
+  grid-template-rows: auto minmax(180px, 1fr) auto auto;
   /* 无边框窗口：内侧留 1px 描边，让窗口边界清晰 */
   border: 1px solid var(--stroke);
   overflow: hidden;
@@ -260,6 +261,22 @@ body {
   display: grid;
   grid-template-columns: var(--sidebar-w) 6px minmax(0, 1fr);
   min-height: 0;
+}
+
+/* 显式指定每个子项所在的列。
+   必须显式：窄窗口下拖拽条会被 display:none 移出文档流，
+   而「未定位」的 grid 子项会顺位填充到下一列 —— 内容区会落进宽度为 0 的
+   第二列（拖拽条那一列），表现为卡片被挤没。 */
+.sidebar {
+  grid-column: 1;
+}
+
+.resizer--v {
+  grid-column: 2;
+}
+
+.content-area {
+  grid-column: 3;
 }
 
 /* 内容区：进度条与提示条常驻上部，卡片区独立滚动 */
@@ -1157,6 +1174,8 @@ body {
 
 .logpanel {
   height: var(--log-h);
+  /* 兜底：日志最多占窗口高度的 62%，避免在小窗口下把主区挤没 */
+  max-height: 62vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
@@ -1943,6 +1962,7 @@ kbd {
     grid-template-columns: min(230px, 38vw) 0 minmax(0, 1fr);
   }
 
+  /* 隐藏拖拽条（侧栏宽度在此断点下固定），列位由上面的 grid-column 显式指定 */
   .resizer--v {
     display: none;
   }

@@ -63,7 +63,11 @@ const DEFAULT_CONFIG: PersistedConfig = {
   logCollapsed: false,
 };
 
-/** 读取持久化配置（缺失 / 损坏时回落到默认值） */
+/** 读取持久化配置（缺失 / 损坏时回落到默认值）
+ *
+ *  面板尺寸必须**按当前窗口重新夹紧**：持久化的是上次的窗口尺寸下拖出来的值，
+ *  若直接沿用，在小窗口下会把主区（卡片区）挤压到几乎不可见。
+ */
 function loadConfig(): PersistedConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
@@ -73,6 +77,11 @@ function loadConfig(): PersistedConfig {
       ...DEFAULT_CONFIG,
       ...parsed,
       perExtension: parsed.perExtension ?? {},
+      sidebarWidth: clampSidebarWidth(
+        parsed.sidebarWidth ?? DEFAULT_CONFIG.sidebarWidth,
+        window.innerWidth,
+      ),
+      logHeight: clampLogHeight(parsed.logHeight ?? DEFAULT_CONFIG.logHeight, window.innerHeight),
     };
   } catch {
     return DEFAULT_CONFIG;
@@ -130,6 +139,16 @@ export function useAppStore() {
   useEffect(() => {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   }, [config]);
+
+  // 首帧也要夹紧一次：loadConfig 已按窗口夹过，这里兜住"窗口在渲染前变化"的情况
+  useEffect(() => {
+    setConfig((prev) => {
+      const sidebarWidth = clampSidebarWidth(prev.sidebarWidth, window.innerWidth);
+      const logHeight = clampLogHeight(prev.logHeight, window.innerHeight);
+      if (sidebarWidth === prev.sidebarWidth && logHeight === prev.logHeight) return prev;
+      return { ...prev, sidebarWidth, logHeight };
+    });
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;

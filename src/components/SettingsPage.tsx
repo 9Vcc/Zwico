@@ -41,6 +41,7 @@ export function SettingsPage({
   scanning,
   perExtensionCount,
   customDir,
+  viewport,
   onBack,
   onThemeChange,
   onToggleLogCollapsed,
@@ -65,6 +66,8 @@ export function SettingsPage({
   scanning: boolean;
   perExtensionCount: number;
   customDir: string;
+  /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
+  viewport: { width: number; height: number };
   onBack: () => void;
   onThemeChange: (theme: "dark" | "light") => void;
   onToggleLogCollapsed: () => void;
@@ -270,6 +273,12 @@ export function SettingsPage({
             <div className="about__row">
               <span>版本</span>
               <span>v{APP_VERSION}</span>
+            </div>
+            <div className="about__row">
+              <span>界面尺寸</span>
+              <span>
+                窗口 {viewport.width}×{viewport.height} · 列表 {sidebarWidth}px · 日志 {logHeight}px
+              </span>
             </div>
             <div className="about__row">
               <span>注册表范围</span>

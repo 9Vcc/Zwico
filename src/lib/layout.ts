@@ -20,6 +20,10 @@ export const LOG_DEFAULT = 150;
 /** 主区（列表 + 内容）至少要留出的高度 */
 const MAIN_MIN = 260;
 
+/** 标题栏 + 日志拖拽条 + 余量：夹紧日志高度时必须一并扣除，
+    否则算出的"上限"会把主区实际压到 MAIN_MIN 以下 */
+const CHROME_HEIGHT = 56;
+
 /** 把期望的侧栏宽度夹到「合法区间 ∩ 窗口宽度允许的上限」 */
 export function clampSidebarWidth(desired: number, viewportWidth: number): number {
   const safeViewport = Number.isFinite(viewportWidth) ? viewportWidth : SIDEBAR_MAX + CONTENT_MIN;
@@ -31,7 +35,10 @@ export function clampSidebarWidth(desired: number, viewportWidth: number): numbe
 /** 把期望的日志高度夹到「合法区间 ∩ 窗口高度允许的上限」 */
 export function clampLogHeight(desired: number, viewportHeight: number): number {
   const safeViewport = Number.isFinite(viewportHeight) ? viewportHeight : LOG_MAX + MAIN_MIN;
-  const upper = Math.max(LOG_MIN, Math.min(LOG_MAX, safeViewport - MAIN_MIN));
+  const upper = Math.max(
+    LOG_MIN,
+    Math.min(LOG_MAX, safeViewport - MAIN_MIN - CHROME_HEIGHT),
+  );
   const value = Number.isFinite(desired) ? desired : LOG_DEFAULT;
   return Math.round(Math.min(Math.max(value, LOG_MIN), upper));
 }
