@@ -34,13 +34,13 @@ impl Channel {
         Channel::Zedg,
     ];
 
-    /// 界面显示的中文名称
-    pub fn display_name(&self) -> &'static str {
+    /// 显示名对应的 i18n key（前端按当前语言渲染，见 src/lib/i18n.ts 的 `channel.*`）
+    pub fn name_key(&self) -> &'static str {
         match self {
-            Channel::Stable => "稳定版",
-            Channel::Preview => "预览版",
-            Channel::Nightly => "每夜版",
-            Channel::Zedg => "汉化版（ZedG）",
+            Channel::Stable => "channel.stable",
+            Channel::Preview => "channel.preview",
+            Channel::Nightly => "channel.nightly",
+            Channel::Zedg => "channel.zedg",
         }
     }
 
@@ -430,7 +430,7 @@ fn scan_from_uninstall(found: &mut Vec<Installation>, seen: &mut HashSet<String>
         for channel in Channel::ALL {
             let exe = dir.join(channel.exe_name());
             if exe.is_file() {
-                push_candidate(found, seen, exe, "卸载注册表");
+                push_candidate(found, seen, exe, "source.uninstall");
                 hit = true;
             }
         }
@@ -440,7 +440,7 @@ fn scan_from_uninstall(found: &mut Vec<Installation>, seen: &mut HashSet<String>
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if looks_like_zed_exe(&path) {
-                        push_candidate(found, seen, path, "卸载注册表");
+                        push_candidate(found, seen, path, "source.uninstall");
                     }
                 }
             }
@@ -467,13 +467,13 @@ fn scan_from_common_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<Strin
                 found,
                 seen,
                 root.join(channel.app_name()).join(channel.exe_name()),
-                "常见安装目录",
+                "source.commonDir",
             );
             push_candidate(
                 found,
                 seen,
                 root.join("Zed").join(channel.exe_name()),
-                "常见安装目录",
+                "source.commonDir",
             );
         }
 
@@ -497,7 +497,7 @@ fn scan_from_common_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<Strin
                 for item in items.flatten() {
                     let path = item.path();
                     if looks_like_zed_exe(&path) {
-                        push_candidate(found, seen, path, "常见安装目录");
+                        push_candidate(found, seen, path, "source.commonDir");
                     }
                 }
             }
@@ -537,10 +537,10 @@ fn scan_from_scoop_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<String
                 }
                 if name.ends_with(".shim") {
                     if let Some(target) = read_shim_target(&path) {
-                        push_candidate(found, seen, target, "scoop shim");
+                        push_candidate(found, seen, target, "source.scoopShim");
                     }
                 } else if looks_like_zed_exe(&path) {
-                    push_candidate(found, seen, path, "PATH");
+                    push_candidate(found, seen, path, "source.path");
                 }
             }
         }
@@ -568,7 +568,7 @@ fn scan_from_scoop_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<String
                 for item in items.flatten() {
                     let path = item.path();
                     if looks_like_zed_exe(&path) {
-                        push_candidate(found, seen, path, "scoop 安装");
+                        push_candidate(found, seen, path, "source.scoop");
                     }
                 }
             }
@@ -589,7 +589,7 @@ fn scan_from_path(found: &mut Vec<Installation>, seen: &mut HashSet<String>) {
         for channel in Channel::ALL {
             let exe = Path::new(dir).join(channel.exe_name());
             if exe.is_file() {
-                push_candidate(found, seen, exe, "PATH");
+                push_candidate(found, seen, exe, "source.path");
             }
         }
     }

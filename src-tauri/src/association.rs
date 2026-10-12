@@ -104,7 +104,7 @@ pub fn list_associations(channel: Channel) -> Result<Vec<FileAssociation>> {
         .count();
     println!(
         "[关联] 通道 {}（前缀 {prefix}）共发现 {} 个关联{}",
-        channel.display_name(),
+        channel.name_key(),
         associations.len(),
         if invalid > 0 {
             format!("，其中 {invalid} 个图标已失效")

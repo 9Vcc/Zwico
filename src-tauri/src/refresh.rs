@@ -11,8 +11,10 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+
+use crate::text::encoded_str;
 
 /// 子进程创建标志：不弹出控制台窗口（GUI 程序拉起命令行工具时必需）
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -37,7 +39,7 @@ pub fn notify_system() -> Result<()> {
 /// - `%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*.db`（图标/缩略图缓存）
 pub fn clear_icon_cache() -> Result<()> {
     let local_appdata =
-        std::env::var("LOCALAPPDATA").context("无法读取 %LOCALAPPDATA% 环境变量")?;
+        std::env::var("LOCALAPPDATA").map_err(|_| anyhow!("{}", encoded_str("back.noLocalAppData", &[])))?;
 
     let mut deleted = 0usize;
     let mut skipped = 0usize;
@@ -103,7 +105,7 @@ pub fn restart_explorer() -> Result<()> {
         .args(["/F", "/IM", "explorer.exe"])
         .creation_flags(CREATE_NO_WINDOW)
         .status()
-        .context("执行 taskkill 失败")?;
+        .map_err(|_| anyhow!("{}", encoded_str("back.taskkillFailed", &[])))?;
     if !status.success() {
         println!("[刷新] taskkill 未成功结束进程（可能当前没有运行中的 explorer.exe）");
     }
@@ -115,7 +117,7 @@ pub fn restart_explorer() -> Result<()> {
     Command::new("explorer.exe")
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
-        .context("重新启动 explorer.exe 失败")?;
+        .map_err(|_| anyhow!("{}", encoded_str("back.explorerStartFailed", &[])))?;
 
     println!("[刷新] explorer.exe 已重新启动");
     Ok(())

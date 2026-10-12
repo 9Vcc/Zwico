@@ -22,6 +22,8 @@ use anyhow::{anyhow, Result};
 use windows_registry::CURRENT_USER;
 use windows_result::HRESULT;
 
+use crate::text::encoded_str;
+
 /// HKCU 下文件关联配置的根路径
 const CLASSES_ROOT: &str = r"Software\Classes";
 
@@ -49,7 +51,7 @@ fn full_path(path: &str) -> String {
 
 /// 将底层注册表错误转换为带键路径上下文的 anyhow 错误
 fn reg_error(path: &str, err: windows_result::Error) -> anyhow::Error {
-    anyhow!("注册表操作失败（HKCU\\{}）：{}", full_path(path), err)
+    anyhow!("{}", encoded_str("back.regError", &[&full_path(path), &err.to_string()]))
 }
 
 /// 读取指定键的默认值（注册表中的「(默认)」值）

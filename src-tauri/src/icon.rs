@@ -20,6 +20,7 @@ use anyhow::{anyhow, Result};
 use serde::Serialize;
 
 use crate::registry;
+use crate::text::encoded_str;
 
 /// 图标操作目标：扩展名及其关联的 ProgID
 ///
@@ -75,6 +76,7 @@ pub struct IconOutcome {
 ///
 /// 设计意图：批量「失败不中断」，但结束时必须让调用方拿到**可展示**的明细，
 /// 而不是只写进控制台（release 下控制台不可见）。
+/// 文案由 `lib.rs` 组装成 i18n key（见 `back.applied` / `back.fallback` / `back.failedItems`）。
 #[derive(Debug, Default, Clone)]
 pub struct BatchReport {
     /// 本次请求处理的总项数
@@ -85,45 +87,6 @@ pub struct BatchReport {
     pub fell_back: Vec<String>,
     /// 失败项：扩展名 + 原因
     pub failed: Vec<(String, String)>,
-}
-
-impl BatchReport {
-    /// 成功项的摘要（始终有值）
-    pub fn applied_summary(&self, verb: &str) -> String {
-        format!("已{verb} {} 个扩展名", self.applied)
-    }
-
-    /// 回退说明（无回退返回 None）
-    pub fn fallback_summary(&self) -> Option<String> {
-        if self.fell_back.is_empty() {
-            None
-        } else {
-            Some(format!(
-                "{} 个扩展名未找到自定义图标，已回退为系统图标（{}）",
-                self.fell_back.len(),
-                self.fell_back.join("、")
-            ))
-        }
-    }
-
-    /// 失败说明（无失败返回 None）
-    pub fn failure_summary(&self) -> Option<String> {
-        if self.failed.is_empty() {
-            None
-        } else {
-            let detail = self
-                .failed
-                .iter()
-                .map(|(ext, reason)| format!("{ext}：{reason}"))
-                .collect::<Vec<_>>()
-                .join("；");
-            Some(format!(
-                "{} 项中 {} 项失败（{detail}）",
-                self.total,
-                self.failed.len()
-            ))
-        }
-    }
 }
 
 /// 返回扩展名对应的系统图标值（imageres.dll 资源引用）
@@ -337,7 +300,7 @@ pub fn set_icon(
     custom_dir: Option<&Path>,
 ) -> Result<IconOutcome> {
     if !registry::key_exists(&target.prog_id)? {
-        return Err(anyhow!("ProgID 键 {} 已不存在，已跳过", target.prog_id));
+        return Err(anyhow!("{}", encoded_str("back.progIdGone", &[&target.prog_id])));
     }
 
     let extension = normalize_extension(&target.extension);
@@ -366,7 +329,7 @@ pub fn set_icon(
 /// 删除指定关联的 DefaultIcon 子键（键不存在时同样返回成功）
 pub fn remove_icon(target: &IconTarget) -> Result<()> {
     if !registry::key_exists(&target.prog_id)? {
-        return Err(anyhow!("ProgID 键 {} 已不存在，已跳过", target.prog_id));
+        return Err(anyhow!("{}", encoded_str("back.progIdGone", &[&target.prog_id])));
     }
     registry::delete_key(&format!("{}\\DefaultIcon", target.prog_id))?;
     println!("[图标] 已删除 {}\\DefaultIcon", target.prog_id);
@@ -578,24 +541,24 @@ mod tests {
 
     /// 批量汇报：回退与失败明细必须可展示
     #[test]
-    fn batch_report_text() {
+    fn batch_report_fields() {
         let report = BatchReport {
             total: 5,
             applied: 2,
             fell_back: vec!["py".into(), "ts".into()],
-            failed: vec![("rs".into(), "ProgID 键已不存在".into())],
+            failed: vec![("rs".into(), "ProgID key is gone".into())],
         };
-        assert!(report.applied_summary("应用").contains('2'));
-        assert!(report.fallback_summary().unwrap().contains("py"));
-        let failures = report.failure_summary().unwrap();
-        assert!(failures.contains("rs") && failures.contains("ProgID"));
+        assert_eq!(report.applied, 2);
+        assert_eq!(report.fell_back.len(), 2);
+        assert_eq!(report.failed.len(), 1);
+        assert_eq!(report.failed[0].0, "rs");
 
         let clean = BatchReport {
             total: 1,
             applied: 1,
             ..Default::default()
         };
-        assert!(clean.fallback_summary().is_none());
-        assert!(clean.failure_summary().is_none());
+        assert!(clean.fell_back.is_empty());
+        assert!(clean.failed.is_empty());
     }
 }

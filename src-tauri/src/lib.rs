@@ -23,6 +23,7 @@ mod icon;
 mod iconrender;
 mod refresh;
 mod registry;
+mod text;
 mod zed;
 
 use std::path::PathBuf;
@@ -33,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use association::FileAssociation;
+use text::encoded;
 use icon::{IconMode, IconState, IconTarget};
 use zed::Channel;
 
@@ -72,32 +74,37 @@ enum LogLevel {
     Error,
 }
 
-/// 日志行（level 决定前端样式）
+/// 日志行：只传 key（+ 可选参数），由前端按当前语言渲染
 #[derive(Serialize, Clone)]
 struct LogLineDto {
-    text: String,
+    key: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    params: Vec<String>,
     level: LogLevel,
 }
 
-fn info(text: impl Into<String>) -> LogLineDto {
+fn log_line(key: &str, params: Vec<String>, level: LogLevel) -> LogLineDto {
     LogLineDto {
-        text: text.into(),
-        level: LogLevel::Info,
+        key: key.to_string(),
+        params,
+        level,
     }
 }
 
-fn warn(text: impl Into<String>) -> LogLineDto {
-    LogLineDto {
-        text: text.into(),
-        level: LogLevel::Warn,
-    }
+fn info(key: &str) -> LogLineDto {
+    log_line(key, Vec::new(), LogLevel::Info)
 }
 
-fn error(text: impl Into<String>) -> LogLineDto {
-    LogLineDto {
-        text: text.into(),
-        level: LogLevel::Error,
-    }
+fn info_p(key: &str, params: Vec<String>) -> LogLineDto {
+    log_line(key, params, LogLevel::Info)
+}
+
+fn warn_p(key: &str, params: Vec<String>) -> LogLineDto {
+    log_line(key, params, LogLevel::Warn)
+}
+
+fn error_p(key: &str, params: Vec<String>) -> LogLineDto {
+    log_line(key, params, LogLevel::Error)
 }
 
 /// 文件关联（前端 DTO）
@@ -233,7 +240,7 @@ where
 {
     tauri::async_runtime::spawn_blocking(f)
         .await
-        .map_err(|err| format!("后台任务异常：{err}"))?
+        .map_err(|err| encoded("back.taskFailed", &[err.to_string()]))?
 }
 
 /// 选择启动通道：① 注册表里已有该通道 ProgID ② 检测到 exe ③ 兜底稳定版
@@ -269,30 +276,28 @@ fn load_sync(channel: Channel) -> Result<Loaded, String> {
 
     let zed_path = match zed::detect_zed_path(channel) {
         Some(path) => {
-            log.push(info(format!("已检测到 Zed：{}", path.display())));
+            log.push(info_p("back.zedDetected", vec![path.display().to_string()]));
             Some(path.display().to_string())
         }
         None => {
-            log.push(warn(format!(
-                "未检测到 {}（「Zed 应用图标」模式不可用，可手动指定路径）",
-                channel.display_name()
-            )));
+            log.push(warn_p(
+                "back.zedMissing",
+                vec![channel.name_key().to_string()],
+            ));
             None
         }
     };
 
     let list =
-        association::list_associations(channel).map_err(|err| format!("加载关联列表失败：{err:#}"))?;
-    log.push(info(format!("已加载 {} 个文件关联", list.len())));
+        association::list_associations(channel).map_err(|err| encoded("back.loadFailed", &[format!("{err:#}")]))?;
+    log.push(info_p("back.assocLoaded", vec![list.len().to_string()]));
 
     let invalid = list
         .iter()
         .filter(|a| a.icon_state == IconState::Missing)
         .count();
     if invalid > 0 {
-        log.push(warn(format!(
-            "其中 {invalid} 个关联的图标文件已失效（源文件已不存在），可一键修复"
-        )));
+        log.push(warn_p("back.assocInvalid", vec![invalid.to_string()]));
     }
 
     Ok(Loaded {
@@ -320,11 +325,10 @@ async fn bootstrap() -> Result<BootstrapDto, String> {
         // 当前通道探测不到时，全量扫描一次并自动选用第一个可用安装
         if zed_path.is_none() {
             if let Some(found) = zed::scan_installations().into_iter().next() {
-                log.push(warn(format!(
-                    "当前通道未检测到 Zed，已自动选用扫描到的 {}（来源：{}）",
-                    found.path.display(),
-                    found.source
-                )));
+                log.push(warn_p(
+                    "back.autoUseZed",
+                    vec![found.path.display().to_string(), found.source.to_string()],
+                ));
                 zed_path = Some(found.path.display().to_string());
             }
         }
@@ -332,7 +336,7 @@ async fn bootstrap() -> Result<BootstrapDto, String> {
         if auto_selected {
             log.insert(
                 0,
-                info(format!("已自动选择通道：{}", channel.display_name())),
+                info_p("back.autoChannel", vec![channel.name_key().to_string()]),
             );
         }
 
@@ -350,7 +354,7 @@ async fn bootstrap() -> Result<BootstrapDto, String> {
 /// 加载指定通道：检测 Zed 路径 + 枚举关联列表（只读，不置 busy）
 #[tauri::command]
 async fn load_state(channel: String) -> Result<LoadState, String> {
-    let channel = Channel::from_key(&channel).ok_or_else(|| format!("未知通道：{channel}"))?;
+    let channel = Channel::from_key(&channel).ok_or_else(|| encoded("back.unknownChannel", &[channel.clone()]))?;
 
     blocking(move || {
         let Loaded {
@@ -403,8 +407,8 @@ fn undo_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
-        .map_err(|err| format!("无法定位应用数据目录：{err}"))?;
-    std::fs::create_dir_all(&dir).map_err(|err| format!("创建应用数据目录失败：{err}"))?;
+        .map_err(|err| encoded("back.appDataDir", &[err.to_string()]))?;
+    std::fs::create_dir_all(&dir).map_err(|err| encoded("back.createDirFailed", &[err.to_string()]))?;
     Ok(dir.join(UNDO_FILE))
 }
 
@@ -412,8 +416,8 @@ fn undo_path(app: &AppHandle) -> Result<PathBuf, String> {
 fn save_undo(app: &AppHandle, snapshot: &UndoSnapshot) -> Result<(), String> {
     let path = undo_path(app)?;
     let json = serde_json::to_string_pretty(snapshot)
-        .map_err(|err| format!("序列化撤销快照失败：{err}"))?;
-    std::fs::write(&path, json).map_err(|err| format!("写入撤销快照失败：{err}"))
+        .map_err(|err| encoded("back.serializeFailed", &[err.to_string()]))?;
+    std::fs::write(&path, json).map_err(|err| encoded("back.writeUndoFailed", &[err.to_string()]))
 }
 
 /// 读取撤销快照（不存在 / 损坏时返回 None）
@@ -456,12 +460,12 @@ fn capture_snapshot(targets: &[IconTarget], action: &str) -> UndoSnapshot {
     }
 }
 
-/// 操作名 → 中文（日志用）
+/// 操作名 → i18n key（日志渲染用）
 fn action_label(action: &str) -> &'static str {
     match action {
-        "apply" => "应用图标",
-        "remove" => "恢复默认",
-        _ => "修改",
+        "apply" => "actionLabel.apply",
+        "remove" => "actionLabel.remove",
+        _ => "actionLabel.other",
     }
 }
 
@@ -474,23 +478,26 @@ fn short_reason(err: &anyhow::Error) -> String {
 }
 
 /// 把失败明细包成一条 error 日志
-fn failure_log(failures: &[(String, String)]) -> Option<LogLineDto> {
+fn failure_log(total: usize, failures: &[(String, String)]) -> Option<LogLineDto> {
     if failures.is_empty() {
         return None;
     }
     let detail = failures
         .iter()
-        .map(|(ext, reason)| format!("{ext}：{reason}"))
+        .map(|(ext, reason)| format!("{ext}: {reason}"))
         .collect::<Vec<_>>()
-        .join("；");
-    Some(error(format!("{} 项失败（{detail}）", failures.len())))
+        .join("; ");
+    Some(error_p(
+        "back.failed",
+        vec![total.to_string(), failures.len().to_string(), detail],
+    ))
 }
 
 /// 广播系统刷新并把结果转成日志行（无副作用，写完必做）
 fn notify_log() -> LogLineDto {
     match refresh::notify_system() {
-        Ok(()) => info("已通知系统刷新文件图标"),
-        Err(err) => warn(format!("广播关联变更失败：{err:#}")),
+        Ok(()) => info("back.notified"),
+        Err(err) => warn_p("back.notifyFailed", vec![format!("{err:#}")]),
     }
 }
 
@@ -508,13 +515,13 @@ async fn apply_icons(
         "system" => IconMode::System,
         "app" => IconMode::App,
         "custom" => IconMode::Custom,
-        other => return Err(format!("未知图标模式：{other}")),
+        other => return Err(encoded("back.unknownMode", &[other.to_string()])),
     };
     if targets.is_empty() {
-        return Err("没有可操作的扩展名".to_string());
+        return Err("back.noTargets".to_string());
     }
     if mode == IconMode::App && zed_path.trim().is_empty() {
-        return Err("未检测到 Zed 可执行文件，无法使用「Zed 应用图标」模式".to_string());
+        return Err("back.appNeedsZed".to_string());
     }
 
     let targets: Vec<IconTarget> = targets.into_iter().map(Into::into).collect();
@@ -548,18 +555,24 @@ async fn apply_icons(
         );
 
         // 3. 组织日志（回退与失败明细必须让用户看到）
-        let mut log = vec![info(report.applied_summary("应用"))];
-        if let Some(text) = report.fallback_summary() {
-            log.push(warn(text));
+        let mut log = vec![info_p("back.applied", vec![report.applied.to_string()])];
+        if !report.fell_back.is_empty() {
+            log.push(warn_p(
+                "back.fallback",
+                vec![
+                    report.fell_back.len().to_string(),
+                    report.fell_back.join(", "),
+                ],
+            ));
         }
-        if let Some(text) = report.failure_summary() {
-            log.push(error(text));
+        if let Some(line) = failure_log(report.total, &report.failed) {
+            log.push(line);
         }
 
         // 4. 仅有成功项时更新撤销快照
         if report.applied > 0 {
             if let Err(err) = save_undo(&app, &snapshot) {
-                log.push(warn(format!("撤销快照保存失败（不影响图标设置）：{err}")));
+                log.push(warn_p("back.undoSavedFailed", vec![err]));
             }
         }
 
@@ -578,7 +591,7 @@ async fn remove_icons(
     targets: Vec<TargetDto>,
 ) -> Result<Vec<LogLineDto>, String> {
     if targets.is_empty() {
-        return Err("没有可操作的扩展名".to_string());
+        return Err("back.noTargets".to_string());
     }
 
     let targets: Vec<IconTarget> = targets.into_iter().map(Into::into).collect();
@@ -601,14 +614,14 @@ async fn remove_icons(
             }
         });
 
-        let mut log = vec![info(report.applied_summary("恢复默认图标"))];
-        if let Some(text) = report.failure_summary() {
-            log.push(error(text));
+        let mut log = vec![info_p("back.removed", vec![report.applied.to_string()])];
+        if let Some(line) = failure_log(report.total, &report.failed) {
+            log.push(line);
         }
 
         if report.applied > 0 {
             if let Err(err) = save_undo(&app, &snapshot) {
-                log.push(warn(format!("撤销快照保存失败（不影响图标恢复）：{err}")));
+                log.push(warn_p("back.undoSavedFailed", vec![err]));
             }
         }
 
@@ -630,19 +643,19 @@ async fn refresh_explorer(
     blocking(move || {
         let mut log = Vec::new();
         match refresh::notify_system() {
-            Ok(()) => log.push(info("已广播文件关联变更通知")),
-            Err(err) => log.push(error(format!("广播关联变更失败：{err:#}"))),
+            Ok(()) => log.push(info("back.notifyBroadcast")),
+            Err(err) => log.push(error_p("back.notifyBroadcastFailed", vec![format!("{err:#}")])),
         }
         if clear_cache {
             match refresh::clear_icon_cache() {
-                Ok(()) => log.push(info("图标缓存清理完成")),
-                Err(err) => log.push(error(format!("清理图标缓存失败：{err:#}"))),
+                Ok(()) => log.push(info("back.cacheCleared")),
+                Err(err) => log.push(error_p("back.cacheClearFailed", vec![format!("{err:#}")])),
             }
         }
         if restart_explorer {
             match refresh::restart_explorer() {
-                Ok(()) => log.push(info("Explorer 已重启")),
-                Err(err) => log.push(error(format!("重启 Explorer 失败：{err:#}"))),
+                Ok(()) => log.push(info("back.explorerRestarted")),
+                Err(err) => log.push(error_p("back.explorerRestartFailed", vec![format!("{err:#}")])),
             }
         }
         Ok(log)
@@ -681,7 +694,7 @@ async fn undo_last(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Log
         let snapshot = read_undo(&app).ok_or_else(|| "没有可撤销的操作".to_string())?;
         if snapshot.entries.is_empty() {
             clear_undo(&app);
-            return Err("没有可撤销的操作".to_string());
+            return Err("back.noUndo".to_string());
         }
 
         let mut restored = 0usize;
@@ -700,11 +713,14 @@ async fn undo_last(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Log
 
         clear_undo(&app);
 
-        let mut log = vec![info(format!(
-            "已撤销上次「{}」操作，恢复 {restored} 项",
-            action_label(&snapshot.action)
-        ))];
-        if let Some(line) = failure_log(&failures) {
+        let mut log = vec![info_p(
+            "back.undoDone",
+            vec![
+                action_label(&snapshot.action).to_string(),
+                restored.to_string(),
+            ],
+        )];
+        if let Some(line) = failure_log(snapshot.entries.len(), &failures) {
             log.push(line);
         }
         log.push(notify_log());
@@ -795,16 +811,13 @@ async fn read_svg_file(path: String) -> Result<String, String> {
             .map(|ext| ext.eq_ignore_ascii_case("svg"))
             .unwrap_or(false);
         if !is_svg {
-            return Err("请选择 .svg 文件".to_string());
+            return Err("back.svgOnly".to_string());
         }
-        let meta = std::fs::metadata(&path).map_err(|err| format!("无法读取 SVG 文件：{err}"))?;
+        let meta = std::fs::metadata(&path).map_err(|err| encoded("back.svgReadFailed", &[err.to_string()]))?;
         if meta.len() > IMAGE_FILE_MAX_BYTES {
-            return Err(format!(
-                "SVG 文件过大（{} KiB，上限 4 MiB）",
-                meta.len() / 1024
-            ));
+            return Err(encoded("back.svgTooLarge", &[(meta.len() / 1024).to_string()]));
         }
-        std::fs::read_to_string(&path).map_err(|err| format!("读取 SVG 失败：{err}"))
+        std::fs::read_to_string(&path).map_err(|err| encoded("back.svgLoadFailed", &[err.to_string()]))
     })
     .await
 }
@@ -819,15 +832,15 @@ async fn save_ico_file(path: String, data: Vec<u8>) -> Result<(), String> {
             .map(|ext| ext.eq_ignore_ascii_case("ico"))
             .unwrap_or(false);
         if !is_ico {
-            return Err("请选择 .ico 作为保存格式".to_string());
+            return Err("back.icoOnly".to_string());
         }
         if data.is_empty() {
-            return Err("生成的图标数据为空".to_string());
+            return Err("back.icoEmpty".to_string());
         }
         if data.len() as u64 > IMAGE_FILE_MAX_BYTES {
-            return Err("生成的图标过大（超过 4 MiB）".to_string());
+            return Err("back.icoTooLarge".to_string());
         }
-        std::fs::write(&path, data).map_err(|err| format!("写图标失败：{err}"))
+        std::fs::write(&path, data).map_err(|err| encoded("back.icoWriteFailed", &[err.to_string()]))
     })
     .await
 }
@@ -846,7 +859,7 @@ const PRESET_MAX_BYTES: u64 = 1024 * 1024;
 fn preset_path(path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err("未选择文件".to_string());
+        return Err("back.noFileChosen".to_string());
     }
     let path = PathBuf::from(trimmed);
     let is_json = path
@@ -854,7 +867,7 @@ fn preset_path(path: &str) -> Result<PathBuf, String> {
         .map(|ext| ext.eq_ignore_ascii_case("json"))
         .unwrap_or(false);
     if !is_json {
-        return Err("预设文件必须是 .json".to_string());
+        return Err("back.presetNotJson".to_string());
     }
     Ok(path)
 }
@@ -864,7 +877,7 @@ fn preset_path(path: &str) -> Result<PathBuf, String> {
 async fn save_preset_file(path: String, content: String) -> Result<(), String> {
     blocking(move || {
         let path = preset_path(&path)?;
-        std::fs::write(&path, content).map_err(|err| format!("写入预设失败：{err}"))
+        std::fs::write(&path, content).map_err(|err| encoded("back.presetWriteFailed", &[err.to_string()]))
     })
     .await
 }
@@ -874,14 +887,11 @@ async fn save_preset_file(path: String, content: String) -> Result<(), String> {
 async fn load_preset_file(path: String) -> Result<String, String> {
     blocking(move || {
         let path = preset_path(&path)?;
-        let meta = std::fs::metadata(&path).map_err(|err| format!("无法读取预设文件：{err}"))?;
+        let meta = std::fs::metadata(&path).map_err(|err| encoded("back.presetReadFailed", &[err.to_string()]))?;
         if meta.len() > PRESET_MAX_BYTES {
-            return Err(format!(
-                "预设文件过大（{} KiB，上限 1 MiB）",
-                meta.len() / 1024
-            ));
+            return Err(encoded("back.presetTooLarge", &[(meta.len() / 1024).to_string()]));
         }
-        std::fs::read_to_string(&path).map_err(|err| format!("读取预设失败：{err}"))
+        std::fs::read_to_string(&path).map_err(|err| encoded("back.presetLoadFailed", &[err.to_string()]))
     })
     .await
 }
@@ -967,17 +977,21 @@ mod tests {
     /// 操作名到中文标签
     #[test]
     fn action_labels() {
-        assert_eq!(action_label("apply"), "应用图标");
-        assert_eq!(action_label("remove"), "恢复默认");
-        assert_eq!(action_label("whatever"), "修改");
+        assert_eq!(action_label("apply"), "actionLabel.apply");
+        assert_eq!(action_label("remove"), "actionLabel.remove");
+        assert_eq!(action_label("whatever"), "actionLabel.other");
     }
 
     /// 失败明细汇总成单条日志
     #[test]
     fn failure_logging() {
-        assert!(failure_log(&[]).is_none());
-        let line = failure_log(&[("rs".to_string(), "键不存在".to_string())]).unwrap();
-        assert!(line.text.contains("rs") && line.text.contains("键不存在"));
+        assert!(failure_log(0, &[]).is_none());
+
+        let line = failure_log(5, &[("rs".to_string(), "key is gone".to_string())]).unwrap();
+        assert_eq!(line.key, "back.failed");
+        assert_eq!(line.params.len(), 3);
+        assert_eq!(line.params[0], "5");
+        assert!(line.params[2].contains("rs"));
         assert!(matches!(line.level, LogLevel::Error));
     }
 }
