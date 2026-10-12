@@ -158,6 +158,58 @@ fn starts_with_ignore_case(name: &str, prefix: &str) -> bool {
         .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
 }
 
+/// 单项移除的结果
+#[derive(Debug, Clone)]
+pub struct SingleRemoval {
+    pub extension: String,
+    /// UserChoice 曾指向本扩展名的 ProgID：移除后系统需要重新指定默认程序
+    pub user_choice_hit: bool,
+}
+
+/// 移除**单个**扩展名的应用注册（Capabilities 条目 + ProgID + 候选条目）
+///
+/// 供手动添加的扩展名做独立移除；不碰 UserChoice（D36）—— 若系统默认应用
+/// 当前指向本扩展名的 ProgID，删除后该扩展名会回到"无默认程序"状态，
+/// 调用方应通过 `user_choice_hit` 提示用户重新指定。
+pub fn unregister_one_extension(channel: Channel, extension: &str) -> Result<SingleRemoval> {
+    if channel != Channel::Zedg {
+        return Err(anyhow::anyhow!(
+            "{}",
+            encoded_str("back.appRegOnlyZedg", &[])
+        ));
+    }
+    let ext = normalize_extension(extension);
+    if !is_valid_extension(&ext) {
+        return Err(anyhow::anyhow!(
+            "{}",
+            encoded_str("back.extInvalid", &[extension])
+        ));
+    }
+    let prog_id = prog_id_for(channel, &ext);
+
+    let user_choice_hit = crate::association::read_user_choice(&format!(".{ext}"))
+        .as_deref()
+        == Some(prog_id.as_str());
+
+    // 1. Capabilities\FileAssociations 条目
+    registry::remove_named_value(
+        &format!(r"{APP_CAPABILITIES}\FileAssociations"),
+        &format!(".{ext}"),
+    )?;
+    // 2. ProgID 整键（类型描述 + DefaultIcon + 打开命令）
+    registry::delete_key(&prog_id)?;
+    // 3. 扩展名候选列表里的条目
+    registry::remove_named_value(
+        &format!(r"Software\Classes\.{ext}\OpenWithProgids"),
+        &prog_id,
+    )?;
+    // 4. 广播通知，让 Explorer 立即感知
+    crate::refresh::notify_system()?;
+
+    println!("[应用注册] 已移除 {ext} 的单项注册（UserChoice 指向本扩展名：{user_choice_hit}）");
+    Ok(SingleRemoval { extension: ext, user_choice_hit })
+}
+
 /// 移除应用注册：清除本应用写入的全部候选条目，不影响其他程序
 pub fn unregister_application(channel: Channel) -> Result<()> {
     if channel != Channel::Zedg {

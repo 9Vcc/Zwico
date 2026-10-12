@@ -912,6 +912,28 @@ async fn notify_icon_refresh() -> Result<(), String> {
     .await
 }
 
+/// 移除单个扩展名的应用注册（手动添加的扩展名的独立移除）
+#[tauri::command]
+async fn unregister_extension(
+    state: State<'_, AppState>,
+    channel: String,
+    extension: String,
+) -> Result<Vec<LogLineDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
+    let _guard = BusyGuard::acquire(state.busy.clone());
+    blocking(move || {
+        let removed =
+            register::unregister_one_extension(channel, &extension).map_err(|err| short_reason(&err))?;
+        let mut log = vec![info_p("back.oneRemoved", vec![removed.extension.clone()])];
+        if removed.user_choice_hit {
+            log.push(warn_p("back.oneRemovedHint", vec![removed.extension]));
+        }
+        Ok(log)
+    })
+    .await
+}
+
 /// 开始拖动窗口（自定义标题栏的拖拽区）
 #[tauri::command]
 fn start_window_drag(window: tauri::Window) {
@@ -1208,6 +1230,7 @@ pub fn run() {
             is_autostart_enabled,
             default_icon_dir,
             notify_icon_refresh,
+            unregister_extension,
         ])
         .on_window_event(|window, event| match event {
             // 关闭 = 隐藏到托盘（常驻后台，任务继续跑）；退出只能通过托盘菜单。

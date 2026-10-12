@@ -184,7 +184,7 @@ fn effective_prog_id(ext_key: &str) -> Option<(String, ProgIdSource)> {
 }
 
 /// 读取 `FileExts\<ext>\UserChoice` 的 ProgId（只读；该键受保护不能改写）
-fn read_user_choice(ext_key: &str) -> Option<String> {
+pub(crate) fn read_user_choice(ext_key: &str) -> Option<String> {
     let path = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
     CURRENT_USER.open(path).ok()?.get_string("ProgId").ok()
 }

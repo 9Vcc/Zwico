@@ -16,6 +16,7 @@ import {
   IconBack,
   IconDownload,
   IconCheck,
+  IconClose,
   IconFolder,
   IconSearch,
   IconUpload,
@@ -66,7 +67,6 @@ export function SettingsPage({
   onUseInstallation,
   onExportPreset,
   onImportPreset,
-  onToggleWatched,
   onAddWatched,
   onRegisterApp,
   onUnregisterApp,
@@ -74,6 +74,7 @@ export function SettingsPage({
   onStartupApplyChange,
   onStartupRefreshCacheChange,
   onOpenDefaultApps,
+  onUnregisterOne,
 }: {
   theme: "dark" | "light";
   lang: LangPref;
@@ -116,7 +117,6 @@ export function SettingsPage({
   onUseInstallation: (path: string) => void;
   onExportPreset: () => void;
   onImportPreset: () => void;
-  onToggleWatched: (ext: string) => void;
   onAddWatched: (exts: string[]) => void;
   onRegisterApp: () => void;
   onUnregisterApp: () => void;
@@ -124,6 +124,8 @@ export function SettingsPage({
   onStartupApplyChange: (value: boolean) => void;
   onStartupRefreshCacheChange: (value: boolean) => void;
   onOpenDefaultApps: () => void;
+  /** 单独移除一个手动扩展名的注册并从列表删除 */
+  onUnregisterOne: (ext: string) => void;
 }) {
   const [customInput, setCustomInput] = useState("");
   const [customHint, setCustomHint] = useState("");
@@ -393,10 +395,11 @@ export function SettingsPage({
                         key={ext}
                         type="button"
                         className="ext-chip ext-chip--on"
-                        data-tip={t("watch.remove.tip")}
-                        onClick={() => onToggleWatched(ext)}
+                        data-tip={t("watch.removeOne.tip")}
+                        onClick={() => onUnregisterOne(ext)}
                       >
                         {ext}
+                        <IconClose size={10} />
                       </button>
                     ))}
                   </div>

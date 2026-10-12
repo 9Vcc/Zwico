@@ -257,6 +257,10 @@ const zh: Record<string, string> = {
 
   "watch.custom.placeholder": "添加扩展名，如 py 或 .rs（可用逗号分隔）",
   "watch.custom.label": "手动添加的扩展名",
+  "watch.removeOne.tip": "移除该扩展名的注册并从列表删除（若它当前是系统默认程序，需重新指定）",
+  "back.oneRemoved": "已移除 {0} 的应用注册",
+  "back.oneRemovedHint": "{0} 当前由系统默认应用指向 ZedG：移除后请重新指定它的默认程序",
+  "fail.unregisterOne": "移除注册失败",
   "watch.add": "添加",
   "watch.added": "已添加 {0} 个扩展名",
   "watch.invalid": "已忽略 {0} 个无效扩展名：{1}",
@@ -705,6 +709,10 @@ const en: Record<string, string> = {
 
   "watch.custom.placeholder": "Add extensions, e.g. py or .rs (comma separated)",
   "watch.custom.label": "Manually added extensions",
+  "watch.removeOne.tip": "Unregister this extension and remove it from the list (re-pick its default app if it was the system default)",
+  "back.oneRemoved": "Unregistered {0}",
+  "back.oneRemovedHint": "{0} was the system default via ZedG: pick a new default app for it",
+  "fail.unregisterOne": "Failed to unregister",
   "watch.add": "Add",
   "watch.added": "Added {0} extensions",
   "watch.invalid": "Ignored {0} invalid extensions: {1}",

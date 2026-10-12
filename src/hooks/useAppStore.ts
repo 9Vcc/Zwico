@@ -461,6 +461,22 @@ export function useAppStore() {
     }
   }, [autostart, fail]);
 
+  /** 单独移除一个手动添加扩展名的注册（并从关注列表删除） */
+  const unregisterOne = useCallback(
+    async (ext: string) => {
+      try {
+        appendLogs(await api.unregisterExtension(channel, ext));
+        patchConfig({ watched: watched.filter((w) => w !== ext) });
+      } catch (err) {
+        fail("fail.unregisterOne", err);
+      } finally {
+        await load(channel);
+        await refreshAppReg();
+      }
+    },
+    [appendLogs, channel, fail, load, patchConfig, refreshAppReg, watched],
+  );
+
   /** 启动时刷新系统图标缓存：SHChangeNotify 广播（轻量、幂等）。
       需在设置中开启「启动时刷新系统图标缓存」（默认关闭） */
   const lastStartupRefresh = useRef("");
@@ -948,6 +964,7 @@ export function useAppStore() {
     toggleWatched,
     registerApp,
     unregisterApp,
+    unregisterOne,
     toggleAutostart,
     setStartupApply: (value: boolean) => patchConfig({ startupApply: value }),
     setStartupRefreshCache: (value: boolean) => patchConfig({ startupRefreshCache: value }),

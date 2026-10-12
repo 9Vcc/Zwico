@@ -157,6 +157,9 @@ export const api = {
   defaultIconDir: () => invoke<string>("default_icon_dir"),
   /** 广播关联变更通知（刷新系统图标缓存，轻量） */
   notifyIconRefresh: () => invoke<void>("notify_icon_refresh"),
+  /** 移除单个扩展名的应用注册（手动添加的扩展名的独立移除） */
+  unregisterExtension: (channel: ChannelKey, extension: string) =>
+    invoke<LogLine[]>("unregister_extension", { channel, extension }),
   startWindowDrag: () => invoke<void>("start_window_drag"),
   windowIsMaximized: () => invoke<boolean>("window_is_maximized"),
 };

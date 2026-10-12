@@ -197,6 +197,9 @@ export function installDevMock(): boolean {
     openDefaultAppsSettings: async () => undefined,
     isAutostartEnabled: async () => false,
     notifyIconRefresh: async () => undefined,
+    unregisterExtension: async (_channel: string, extension: string) => [
+      { key: "back.oneRemoved", params: [extension], level: "info" },
+    ],
     defaultIconDir: async () => "D:////mock////icon",
     setAutostart: async () => undefined,
     inspectApplicationRegistration: async () => ({ registered: false, covered: 0 }),

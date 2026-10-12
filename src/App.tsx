@@ -243,6 +243,7 @@ export default function App() {
           onLangChange={store.setLangPref}
           autostart={store.autostart}
           onToggleAutostart={() => void store.toggleAutostart()}
+          onUnregisterOne={(ext) => void store.unregisterOne(ext)}
           startupApply={store.startupApply}
           startupRefreshCache={store.startupRefreshCache}
           onStartupApplyChange={(value) => store.setStartupApply(value)}
@@ -257,7 +258,6 @@ export default function App() {
           onUseInstallation={store.useInstallation}
           onExportPreset={() => void store.exportPreset()}
           onImportPreset={() => void store.importPreset()}
-          onToggleWatched={store.toggleWatched}
           onAddWatched={store.addWatched}
           onRegisterApp={() => void store.registerApp()}
           onUnregisterApp={() => void store.unregisterApp()}
