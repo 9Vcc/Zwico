@@ -4,7 +4,7 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { MODES } from "./api";
-import { ActionsCard, MaintenanceCard, UndoCard } from "./components/ActionCards";
+import { ActionsCard, MaintenanceCard } from "./components/ActionCards";
 import { AssociationList } from "./components/AssociationList";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { IconSettingsCard } from "./components/IconSettingsCard";
@@ -12,6 +12,7 @@ import { LogPanel } from "./components/LogPanel";
 import { PresetCard } from "./components/PresetCard";
 import { SvgToIcoDialog } from "./components/SvgToIcoDialog";
 import { TitleBar } from "./components/TitleBar";
+import { TooltipLayer } from "./components/Tooltip";
 import { IconAlert, IconWand } from "./components/ui";
 import { useAppStore } from "./hooks/useAppStore";
 import { ToastStack } from "./hooks/useToast";
@@ -156,7 +157,7 @@ export default function App() {
           role="separator"
           aria-orientation="vertical"
           aria-label="拖动调整列表宽度"
-          title="拖动调整列表宽度（双击恢复默认）"
+          data-tip="拖动调整列表宽度（双击恢复默认）"
           onPointerDown={onSidebarStart}
           onPointerMove={onSidebarMove}
           onPointerUp={onSidebarEnd}
@@ -185,7 +186,7 @@ export default function App() {
                 type="button"
                 className="btn btn--mini btn--attention"
                 disabled={store.busy}
-                title="按当前图标来源重设这些关联，使其重新可用"
+                data-tip="按当前图标来源重设这些关联，使其重新可用"
                 onClick={store.repairInvalid}
               >
                 <IconWand size={12} />
@@ -209,7 +210,6 @@ export default function App() {
             onModeChange={store.setMode}
             onCustomDirChange={store.setCustomDir}
             onPickCustomDir={() => void store.pickCustomDir()}
-            onOpenSvgIco={store.openSvgIco}
           />
 
           <ActionsCard
@@ -217,12 +217,13 @@ export default function App() {
             total={store.stats.total}
             modeLabel={modeLabel}
             busy={store.busy}
+            undoStatus={store.undoStatus}
             onApplySelected={store.applySelected}
             onApplyAll={store.applyAll}
             onReset={() => store.setDialog("remove")}
+            onUndo={store.undo}
+            onOpenSvgIco={store.openSvgIco}
           />
-
-          <UndoCard status={store.undoStatus} busy={store.busy} onUndo={store.undo} />
 
           <MaintenanceCard
             busy={store.busy}
@@ -252,7 +253,7 @@ export default function App() {
           role="separator"
           aria-orientation="horizontal"
           aria-label="拖动调整日志高度"
-          title="拖动调整日志高度（双击恢复默认）"
+          data-tip="拖动调整日志高度（双击恢复默认）"
           onPointerDown={onLogStart}
           onPointerMove={onLogMove}
           onPointerUp={onLogEnd}
@@ -288,6 +289,9 @@ export default function App() {
       ) : null}
 
       <ToastStack toasts={store.toasts} onDismiss={store.dismissToast} />
+
+      {/* 统一的自绘提示层（data-tip / data-tip-icon） */}
+      <TooltipLayer />
     </div>
   );
 }

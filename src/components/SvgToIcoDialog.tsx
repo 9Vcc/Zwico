@@ -65,7 +65,7 @@ export function SvgToIcoDialog({
                 选择 SVG…
               </button>
               {state.svgPath ? (
-                <span className="svg-ico__file" title={state.svgPath}>
+                <span className="svg-ico__file" data-tip={state.svgPath}>
                   {baseName(state.svgPath)}
                 </span>
               ) : null}
@@ -79,7 +79,7 @@ export function SvgToIcoDialog({
                   <label
                     key={size}
                     className={`size-chip${on ? " size-chip--on" : ""}`}
-                    title={`输出 ${size}×${size} 像素`}
+                    data-tip={`输出 ${size}×${size} 像素`}
                   >
                     <input
                       type="checkbox"
@@ -105,7 +105,7 @@ export function SvgToIcoDialog({
             type="button"
             className="btn btn--dialog"
             disabled={state.converting || state.sizes.length === 0 || state.svgText === ""}
-            title="按所选尺寸生成图标数据"
+            data-tip="按所选尺寸生成图标数据"
             onClick={onConvert}
           >
             {state.converting ? <Spinner size={12} /> : null}
@@ -115,7 +115,7 @@ export function SvgToIcoDialog({
             type="button"
             className="btn btn--primary btn--dialog"
             disabled={state.bytes === null}
-            title={state.bytes ? "保存为 .ico 文件" : "请先执行转换"}
+            data-tip={state.bytes ? "保存为 .ico 文件" : "请先执行转换"}
             onClick={onSave}
           >
             <IconDownload size={13} />

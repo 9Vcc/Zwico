@@ -226,11 +226,6 @@ body {
   flex: 0 0 auto;
 }
 
-.select--compact {
-  padding: 4px 6px;
-  font-size: 12px;
-}
-
 .win-controls {
   display: flex;
   align-items: center;
@@ -273,6 +268,8 @@ body {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  /* start：卡片高度贴合自身内容，不被同行最高卡片拉伸 */
+  align-items: start;
   align-content: start;
   min-height: 0;
 }
@@ -351,8 +348,7 @@ body {
 
 /* ===== 表单元素 ===== */
 
-.input,
-.select {
+.input {
   padding: 7px 9px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--stroke-strong);
@@ -362,8 +358,7 @@ body {
   font-family: inherit;
 }
 
-.input:focus,
-.select:focus {
+.input:focus {
   border-color: var(--accent);
   outline: none;
 }
@@ -372,7 +367,6 @@ body {
   color: var(--text-weak);
 }
 
-.select:disabled,
 .input:disabled {
   background: var(--disabled-bg);
   color: var(--disabled-fg);
@@ -1332,6 +1326,165 @@ body {
   border-top-color: transparent;
   animation: spin 0.7s linear infinite;
   flex: 0 0 auto;
+}
+
+/* ===== 卡片内的分隔线与工具按钮 ===== */
+
+.card__divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--stroke);
+}
+
+.undo-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* 醒目的工具入口（SVG 转 ICO）：用强调色描边，区别于普通次级按钮 */
+.btn--tool {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.btn--tool:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.btn--tool:disabled {
+  background: var(--disabled-bg);
+  border-color: var(--stroke);
+  color: var(--disabled-fg);
+}
+
+/* ===== 自绘下拉（替代原生 select 的系统弹层） ===== */
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.dropdown__button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--text-weak);
+}
+
+.dropdown__button:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+
+.dropdown__value {
+  white-space: nowrap;
+}
+
+.dropdown__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 70;
+  min-width: 180px;
+  max-width: 288px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
+  animation: fade-in 0.1s ease-out;
+}
+
+.dropdown__option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dropdown__option--active {
+  background: var(--bg-hover);
+}
+
+.dropdown__option--on {
+  background: var(--accent-soft);
+}
+
+.dropdown__option--on .dropdown__label {
+  color: var(--accent);
+}
+
+.dropdown__hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-weak);
+}
+
+/* ===== 自绘提示浮层（data-tip / data-tip-icon） ===== */
+
+.tooltip {
+  position: fixed;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 7px 10px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  animation: fade-in 0.1s ease-out;
+}
+
+.tooltip__icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
+.tooltip__title {
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.tooltip__text {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 /* ===== 图标预览（列表行内，位于扩展名之前） ===== */

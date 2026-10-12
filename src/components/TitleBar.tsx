@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { APP_VERSION, api, CHANNELS, onWindowMaximized, type ChannelKey } from "../api";
+import { Select } from "./Select";
 import {
   IconClose,
   IconMaximize,
@@ -65,7 +66,7 @@ export function TitleBar({
         className="titlebar__drag"
         onPointerDown={startDrag}
         onDoubleClick={() => void api.windowToggleMaximize()}
-        title="拖动可移动窗口，双击切换最大化"
+        data-tip="拖动可移动窗口，双击切换最大化"
       >
         <span className="brand__mark" aria-hidden>
           Z
@@ -75,7 +76,7 @@ export function TitleBar({
           <p className="brand__sub">v{APP_VERSION} · 仅修改当前用户配置</p>
         </div>
         {busy ? (
-          <span className="busy-chip" title="有任务正在执行">
+          <span className="busy-chip" data-tip="有任务正在执行">
             <Spinner size={12} />
             处理中
           </span>
@@ -83,25 +84,23 @@ export function TitleBar({
       </div>
 
       <div className="titlebar__tools">
-        <select
-          className="select select--compact"
+        <Select
           value={channel}
+          options={CHANNELS.map((item) => ({
+            value: item.key,
+            label: item.label,
+            hint: item.hint,
+          }))}
           disabled={busy}
-          aria-label="Zed 发行通道"
-          title={current?.hint ?? "选择实际安装的 Zed 发行通道"}
-          onChange={(e) => onChannelChange(e.target.value as ChannelKey)}
-        >
-          {CHANNELS.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Zed 发行通道"
+          dataTip={current?.hint ?? "选择实际安装的 Zed 发行通道"}
+          onChange={onChannelChange}
+        />
 
         <button
           type="button"
           className="btn btn--icon"
-          title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
+          data-tip={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
           aria-label="切换主题"
           onClick={onToggleTheme}
         >
@@ -112,7 +111,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn"
-            title="最小化"
+            data-tip="最小化"
             aria-label="最小化"
             onClick={() => void api.windowMinimize()}
           >
@@ -121,7 +120,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn"
-            title={maximized ? "还原" : "最大化"}
+            data-tip={maximized ? "还原" : "最大化"}
             aria-label={maximized ? "还原" : "最大化"}
             onClick={() => void api.windowToggleMaximize()}
           >
@@ -130,7 +129,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn win-btn--close"
-            title="关闭（有任务进行中会先确认）"
+            data-tip="关闭（有任务进行中会先确认）"
             aria-label="关闭"
             onClick={() => void api.windowClose()}
           >

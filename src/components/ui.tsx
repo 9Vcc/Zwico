@@ -36,7 +36,7 @@ export function Pill({
   children: ReactNode;
 }) {
   return (
-    <span className={`pill pill--${tone}`} title={title}>
+    <span className={`pill pill--${tone}`} data-tip={title}>
       {children}
     </span>
   );
@@ -58,7 +58,7 @@ export function Switch({
   title?: string;
 }) {
   return (
-    <label className="switch" title={title}>
+    <label className="switch" data-tip={title}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span className="switch__track" aria-hidden>
         <span className="switch__thumb" />
@@ -143,14 +143,6 @@ export const IconUpload = ({ size }: IconProps) => (
 export const IconFolder = ({ size }: IconProps) => (
   <Svg size={size}>
     <path d="M2 4.2 A1.2 1.2 0 0 1 3.2 3 H6.2 L7.6 4.6 H12.8 A1.2 1.2 0 0 1 14 5.8 V11.8 A1.2 1.2 0 0 1 12.8 13 H3.2 A1.2 1.2 0 0 1 2 11.8 Z" />
-  </Svg>
-);
-
-export const IconImage = ({ size }: IconProps) => (
-  <Svg size={size}>
-    <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" />
-    <circle cx="6" cy="6.6" r="1.1" />
-    <path d="M2.6 11.2 L6.6 8.2 L9.4 10.6 L11.6 8.8 L13.4 10.4" />
   </Svg>
 );
 
@@ -242,5 +234,13 @@ export const IconShapes = ({ size }: IconProps) => (
     <path d="M8 2.4 L11.2 8 H4.8 Z" />
     <circle cx="5" cy="11" r="2.6" />
     <rect x="8.6" y="8.4" width="5.4" height="5.4" rx="1.2" />
+  </Svg>
+);
+
+/** 新增 / 指定 */
+export const IconPlus = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M8 3.4 V12.6" />
+    <path d="M3.4 8 H12.6" />
   </Svg>
 );

@@ -56,7 +56,7 @@ export function ToastStack({
           key={toast.id}
           type="button"
           className={`toast toast--${toast.tone}`}
-          title="点击关闭"
+          data-tip="点击关闭"
           onClick={() => onDismiss(toast.id)}
         >
           <span className="toast__bar" aria-hidden />

@@ -544,7 +544,8 @@ export function useAppStore() {
       const updates: Record<string, string | null> = {};
       for (const value of pending.slice(0, 80)) {
         try {
-          updates[value] = await api.previewIcon(value, 16);
+          // 取 32px：行内用 CSS 缩到 16 显示，悬停放大时用原始尺寸，避免二次请求
+          updates[value] = await api.previewIcon(value, 32);
         } catch {
           updates[value] = null;
         }

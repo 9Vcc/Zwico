@@ -34,7 +34,7 @@ export function LogPanel({
         <button
           type="button"
           className="logpanel__toggle"
-          title={collapsed ? "展开日志面板" : "折叠日志面板"}
+          data-tip={collapsed ? "展开日志面板" : "折叠日志面板"}
           onClick={onToggleCollapse}
         >
           <IconChevron size={13} open={!collapsed} />
@@ -45,13 +45,13 @@ export function LogPanel({
           <button
             type="button"
             className="btn btn--mini"
-            title="复制全部日志到剪贴板"
+            data-tip="复制全部日志到剪贴板"
             onClick={copyAll}
           >
             <IconCopy size={12} />
             复制
           </button>
-          <button type="button" className="btn btn--mini" title="清空日志区" onClick={onClear}>
+          <button type="button" className="btn btn--mini" data-tip="清空日志区" onClick={onClear}>
             <IconTrash size={12} />
             清空
           </button>
@@ -67,7 +67,7 @@ export function LogPanel({
               <div
                 key={index}
                 className={`logline logline--${line.level}`}
-                title="右键复制本条日志"
+                data-tip="右键复制本条日志"
                 onContextMenu={(event) => {
                   event.preventDefault();
                   void writeText(line.text);

@@ -1,8 +1,20 @@
-// 操作卡片组：应用 / 恢复、撤销、资源管理器维护
+// 操作卡片：图标应用 / 恢复、撤销、SVG 转 ICO 工具
+//
+// 按「主操作 → 次操作 → 工具」三层排列；撤销与工具入口都收在本卡内。
 
 import type { UndoStatus } from "../api";
 import { formatTimestamp } from "../lib/iconInfo";
-import { Card, IconAlert, IconRefresh, IconUndo, IconWand, Pill, Spinner, Switch } from "./ui";
+import {
+  Card,
+  IconAlert,
+  IconRefresh,
+  IconShapes,
+  IconUndo,
+  IconWand,
+  Pill,
+  Spinner,
+  Switch,
+} from "./ui";
 
 const ACTION_LABEL: Record<string, string> = {
   apply: "应用图标",
@@ -14,26 +26,39 @@ export function ActionsCard({
   total,
   modeLabel,
   busy,
+  undoStatus,
   onApplySelected,
   onApplyAll,
   onReset,
+  onUndo,
+  onOpenSvgIco,
 }: {
   selectedCount: number;
   total: number;
   modeLabel: string;
   busy: boolean;
+  undoStatus: UndoStatus;
   onApplySelected: () => void;
   onApplyAll: () => void;
   onReset: () => void;
+  onUndo: () => void;
+  onOpenSvgIco: () => void;
 }) {
   const canApply = !busy && selectedCount > 0;
+  const undoLabel = undoStatus.action
+    ? (ACTION_LABEL[undoStatus.action] ?? undoStatus.action)
+    : "";
+  const undoNote = undoStatus.available
+    ? `可恢复到「${undoLabel}」之前（${undoStatus.count} 项 · ${formatTimestamp(undoStatus.timestamp ?? 0)}）`
+    : "每次写入前会自动记录原值，可撤销一次";
+
   return (
     <Card title="操作" hint={`当前来源：${modeLabel}`}>
       <button
         type="button"
         className="btn btn--primary btn--wide"
         disabled={!canApply}
-        title={
+        data-tip={
           selectedCount > 0
             ? `把「${modeLabel}」应用到左侧勾选的 ${selectedCount} 个扩展名`
             : "请先在左侧勾选要操作的扩展名"
@@ -47,60 +72,55 @@ export function ActionsCard({
       <div className="btn-row">
         <button
           type="button"
-          className="btn btn--wide"
+          className="btn"
           disabled={busy || total === 0}
-          title="应用到当前通道下的全部文件关联（忽略勾选状态）"
+          data-tip="应用到当前通道下的全部文件关联（忽略勾选状态）"
           onClick={onApplyAll}
         >
           应用到全部{total > 0 ? `（${total}）` : ""}
         </button>
         <button
           type="button"
-          className="btn btn--danger btn--wide"
+          className="btn btn--danger"
           disabled={busy || selectedCount === 0}
-          title="删除选中项的 DefaultIcon 注册表键，恢复系统默认图标（会先确认）"
+          data-tip="删除选中项的 DefaultIcon 注册表键，恢复系统默认图标（执行前会确认）"
           onClick={onReset}
         >
           恢复默认
         </button>
       </div>
-    </Card>
-  );
-}
 
-export function UndoCard({
-  status,
-  busy,
-  onUndo,
-}: {
-  status: UndoStatus;
-  busy: boolean;
-  onUndo: () => void;
-}) {
-  const label = status.action ? (ACTION_LABEL[status.action] ?? status.action) : "";
-  const time = status.timestamp ? formatTimestamp(status.timestamp) : "";
-  return (
-    <Card
-      title="撤销"
-      hint={
-        status.available
-          ? `可恢复到上次写入之前的状态（${label} · ${status.count} 项 · ${time}）`
-          : "每次写入前会自动记录原值，可随时撤销一次"
-      }
-    >
+      <div className="card__divider" />
+
+      <div className="undo-block">
+        <button
+          type="button"
+          className="btn btn--wide"
+          disabled={busy || !undoStatus.available}
+          data-tip={
+            undoStatus.available
+              ? "把上次写入涉及的 DefaultIcon 恢复为写入前的值（只能撤销一次）"
+              : "暂无可撤销的记录：执行一次「应用」或「恢复默认」后即可使用"
+          }
+          onClick={onUndo}
+        >
+          <IconUndo size={14} />
+          撤销上次操作
+        </button>
+        <p className="card__note">{undoNote}</p>
+      </div>
+
+      <div className="card__divider" />
+
       <button
         type="button"
-        className="btn btn--wide"
-        disabled={busy || !status.available}
-        title={
-          status.available
-            ? "把上次写入涉及的 DefaultIcon 恢复为写入前的值"
-            : "暂无可撤销的记录（执行一次应用或恢复后即可用）"
-        }
-        onClick={onUndo}
+        className="btn btn--wide btn--tool"
+        disabled={busy}
+        data-tip="把 SVG 矢量图转换成多尺寸 .ico（16/24/32/48/64/128/256），可直接用于「自定义图标目录」或逐项专属图标"
+        onClick={onOpenSvgIco}
       >
-        <IconUndo size={14} />
-        撤销上次操作
+        <IconShapes size={14} />
+        SVG 转 ICO 生成图标
       </button>
     </Card>
   );
@@ -136,7 +156,7 @@ export function MaintenanceCard({
           type="button"
           className="btn btn--wide btn--attention"
           disabled={busy}
-          title="按当前图标来源重设所有指向已不存在文件的关联"
+          data-tip="按当前图标来源重设所有指向已不存在文件的关联"
           onClick={onRepair}
         >
           <IconWand size={14} />
@@ -148,7 +168,7 @@ export function MaintenanceCard({
         type="button"
         className="btn btn--wide"
         disabled={busy}
-        title="广播关联变更通知；按下方开关决定是否清缓存 / 重启 Explorer"
+        data-tip="广播关联变更通知；按下方开关决定是否清缓存 / 重启 Explorer"
         onClick={onRefresh}
       >
         <IconRefresh size={14} />
@@ -160,13 +180,13 @@ export function MaintenanceCard({
           checked={clearCache}
           onChange={onClearCache}
           label="清除图标缓存"
-          title="删除 IconCache.db 与 thumbcache_*.db，强制 Explorer 重建图标缓存"
+          data-tip="删除 IconCache.db 与 thumbcache_*.db，强制 Explorer 重建图标缓存"
         />
         <Switch
           checked={restartExplorer}
           onChange={onRestartExplorer}
           label="重启 Explorer"
-          title="刷新最彻底，但桌面与任务栏会短暂消失（约 2–3 秒），执行前会二次确认"
+          data-tip="刷新最彻底，但桌面与任务栏会短暂消失（约 2–3 秒），执行前会二次确认"
         />
       </div>
 

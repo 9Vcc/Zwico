@@ -8,7 +8,7 @@ import {
   type ZedInstallation,
 } from "../api";
 import { baseName } from "../lib/iconInfo";
-import { Card, IconFolder, IconSearch, IconShapes, Pill, Spinner } from "./ui";
+import { Card, IconFolder, IconSearch, Pill, Spinner } from "./ui";
 
 export function IconSettingsCard({
   zedPath,
@@ -25,7 +25,6 @@ export function IconSettingsCard({
   onModeChange,
   onCustomDirChange,
   onPickCustomDir,
-  onOpenSvgIco,
 }: {
   zedPath: string | null;
   mode: IconMode;
@@ -41,7 +40,6 @@ export function IconSettingsCard({
   onModeChange: (mode: IconMode) => void;
   onCustomDirChange: (value: string) => void;
   onPickCustomDir: () => void;
-  onOpenSvgIco: () => void;
 }) {
   const [showList, setShowList] = useState(false);
 
@@ -60,7 +58,7 @@ export function IconSettingsCard({
               type="button"
               className="btn btn--mini"
               disabled={disabled || scanning}
-              title="自动扫描本机所有 Zed 安装（卸载注册表 / 常见安装目录 / scoop / PATH），跨通道查找"
+              data-tip="自动扫描本机所有 Zed 安装（卸载注册表 / 常见安装目录 / scoop / PATH），跨通道查找"
               onClick={onScan}
             >
               {scanning ? <Spinner size={11} /> : <IconSearch size={11} />}
@@ -69,7 +67,7 @@ export function IconSettingsCard({
             <button
               type="button"
               className="btn btn--mini"
-              title="手动指定 Zed / ZedG 可执行文件（适用于任何安装方式）"
+              data-tip="手动指定 Zed / ZedG 可执行文件（适用于任何安装方式）"
               onClick={onPickZed}
             >
               选择…
@@ -77,7 +75,7 @@ export function IconSettingsCard({
           </div>
         </div>
 
-        <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
+        <div className={`path${zedPath ? "" : " path--warn"}`} data-tip={zedPath ?? undefined}>
           <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
           <span className="path__text">{zedPath ? baseName(zedPath) : "未检测到 Zed"}</span>
           <span className="path__sub">
@@ -95,7 +93,7 @@ export function IconSettingsCard({
                   <button
                     type="button"
                     className={`install-item${active ? " install-item--on" : ""}`}
-                    title={`${item.path}\n来源：${item.source}`}
+                    data-tip={`${item.path}\n来源：${item.source}`}
                     onClick={() => onUseInstallation(item.path)}
                   >
                     <span className="install-item__channel">{label}</span>
@@ -119,7 +117,7 @@ export function IconSettingsCard({
                 key={item.key}
                 type="button"
                 className={`option${mode === item.key ? " option--on" : ""}`}
-                title={needsZed ? "需要先指定 Zed 可执行文件" : item.hint}
+                data-tip={needsZed ? "需要先指定 Zed 可执行文件" : item.hint}
                 disabled={disabled || needsZed}
                 aria-pressed={mode === item.key}
                 onClick={() => onModeChange(item.key)}
@@ -142,7 +140,7 @@ export function IconSettingsCard({
             <button
               type="button"
               className="btn btn--mini"
-              title="选择包含 <扩展名>.ico 文件的文件夹"
+              data-tip="选择包含 <扩展名>.ico 文件的文件夹"
               onClick={onPickCustomDir}
             >
               <IconFolder size={12} />
@@ -160,7 +158,7 @@ export function IconSettingsCard({
               customDir.trim() === "" ? (
                 <Pill tone="muted">未设置目录，将回退系统图标</Pill>
               ) : (
-                <Pill tone="danger" title="目录不存在或无法读取">
+                <Pill tone="danger" data-tip="目录不存在或无法读取">
                   目录不可读
                 </Pill>
               )
@@ -170,29 +168,13 @@ export function IconSettingsCard({
               <Pill tone="warn">目录中没有 .ico 文件</Pill>
             )}
             {perExtensionCount > 0 ? (
-              <Pill tone="info" title="这些扩展名使用单独指定的图标，不受上面的目录影响">
+              <Pill tone="info" data-tip="这些扩展名使用单独指定的图标，不受上面的目录影响">
                 {perExtensionCount} 项专属图标
               </Pill>
             ) : null}
           </div>
         </div>
       ) : null}
-
-      <div className="field field--sub">
-        <div className="field__head">
-          <span className="field__label">图标工具</span>
-          <button
-            type="button"
-            className="btn btn--mini"
-            disabled={disabled}
-            title="把 SVG 矢量图转换成多尺寸 .ico（16/24/32/48/64/128/256），可直接用于自定义图标"
-            onClick={onOpenSvgIco}
-          >
-            <IconShapes size={12} />
-            SVG 转 ICO
-          </button>
-        </div>
-      </div>
     </Card>
   );
 }

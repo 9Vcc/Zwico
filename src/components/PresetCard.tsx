@@ -26,7 +26,7 @@ export function PresetCard({
         <Pill tone="info">{modeLabel}</Pill>
         {perExtensionCount > 0 ? <Pill tone="ok">{perExtensionCount} 项专属图标</Pill> : null}
         {customDir !== "" ? (
-          <Pill tone="muted" title={customDir}>
+          <Pill tone="muted" data-tip={customDir}>
             已设图标目录
           </Pill>
         ) : null}
@@ -37,7 +37,7 @@ export function PresetCard({
           type="button"
           className="btn btn--wide"
           disabled={busy}
-          title="导出为 .json 预设文件"
+          data-tip="导出为 .json 预设文件"
           onClick={onExport}
         >
           <IconDownload size={14} />
@@ -47,7 +47,7 @@ export function PresetCard({
           type="button"
           className="btn btn--wide"
           disabled={busy}
-          title="从 .json 预设文件导入（导入后需点「应用」才写入注册表）"
+          data-tip="从 .json 预设文件导入（导入后需点「应用」才写入注册表）"
           onClick={onImport}
         >
           <IconUpload size={14} />

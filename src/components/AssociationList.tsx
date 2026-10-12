@@ -2,7 +2,7 @@
 
 import type { Association } from "../api";
 import { describeIcon } from "../lib/iconInfo";
-import { IconCheck, IconClose, IconImage, IconSearch, IconShare, Spinner } from "./ui";
+import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, Spinner } from "./ui";
 
 export function AssociationList({
   items,
@@ -54,7 +54,7 @@ export function AssociationList({
           <button
             type="button"
             className="search__clear"
-            title="清除搜索"
+            data-tip="清除搜索"
             onClick={() => onSearch("")}
           >
             <IconClose size={12} />
@@ -92,7 +92,7 @@ export function AssociationList({
           <button
             type="button"
             className="btn btn--mini"
-            title="选中列表中的全部扩展名"
+            data-tip="选中列表中的全部扩展名"
             onClick={onSelectAll}
           >
             全选
@@ -100,12 +100,12 @@ export function AssociationList({
           <button
             type="button"
             className="btn btn--mini"
-            title="翻转列表中各项的选中状态"
+            data-tip="翻转列表中各项的选中状态"
             onClick={onInvert}
           >
             反选
           </button>
-          <button type="button" className="btn btn--mini" title="取消全部选中" onClick={onClear}>
+          <button type="button" className="btn btn--mini" data-tip="取消全部选中" onClick={onClear}>
             清空
           </button>
         </div>
@@ -155,7 +155,7 @@ function Row({
       <button
         type="button"
         className="row__main"
-        title={tip}
+        data-tip={tip}
         role="option"
         aria-selected={selected}
         onClick={() => onToggle(assoc.extension)}
@@ -164,8 +164,13 @@ function Row({
           {selected ? <IconCheck size={11} /> : null}
         </span>
 
-        {/* 图标预览：直接显示该项当前真实生效的图标 */}
-        <span className="row__icon" aria-hidden>
+        {/* 图标预览：悬停在图标上会放大显示（data-tip-icon 由 TooltipLayer 渲染） */}
+        <span
+          className="row__icon"
+          data-tip={desc.detail}
+          data-tip-icon={preview ?? undefined}
+          data-tip-title={`.${assoc.extension}`}
+        >
           {preview ? (
             <img src={preview} alt="" width={16} height={16} draggable={false} />
           ) : (
@@ -176,17 +181,17 @@ function Row({
         <span className="row__ext">.{assoc.extension}</span>
         <span className="row__tags">
           {assoc.iconState === "missing" ? (
-            <span className="tag tag--danger" title={desc.detail}>
+            <span className="tag tag--danger" data-tip={desc.detail}>
               失效
             </span>
           ) : null}
-          <span className={`tag tag--${desc.tone}`} title={desc.detail}>
+          <span className={`tag tag--${desc.tone}`} data-tip={desc.detail}>
             {desc.label}
           </span>
           {sharedCount > 0 ? (
             <span
               className="tag tag--warn"
-              title={`该 ProgID 被 ${sharedCount + 1} 个扩展名共用，改图标会同时影响：${assoc.sharedWith.join("、")}`}
+              data-tip={`该 ProgID 被 ${sharedCount + 1} 个扩展名共用，改图标会同时影响：${assoc.sharedWith.join("、")}`}
             >
               <IconShare size={10} />
               共享 {sharedCount}
@@ -199,16 +204,22 @@ function Row({
         <button
           type="button"
           className="btn btn--icon btn--tiny"
-          title={perIcon ? `专属图标：${perIcon}（点击更换）` : "为该项单独指定 .ico 图标"}
+          data-tip={
+            perIcon
+              ? `已指定专属图标：${perIcon}\n点击可更换`
+              : "为该扩展名单独指定 .ico 图标"
+          }
+          aria-label="指定专属图标"
           onClick={() => onPickIcon(assoc.extension)}
         >
-          <IconImage size={13} />
+          <IconPlus size={13} />
         </button>
         {perIcon ? (
           <button
             type="button"
             className="btn btn--icon btn--tiny"
-            title="清除该项的专属图标"
+            data-tip="清除该项的专属图标"
+            aria-label="清除专属图标"
             onClick={() => onClearIcon(assoc.extension)}
           >
             <IconClose size={12} />
