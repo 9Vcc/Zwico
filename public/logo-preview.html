@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Zwico Logo 使用示例</title>
+<style>
+  :root {
+    --accent: #4a86f7;
+    --bg: #f5f6f9;
+    --bg-panel: #ffffff;
+    --text: #1c2230;
+    --text-dim: #6b7280;
+    --border: #e3e6ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    padding: 40px 24px;
+  }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  .sub { color: var(--text-dim); margin-bottom: 32px; font-size: 14px; }
+  .row {
+    display: flex; flex-wrap: wrap; gap: 24px; align-items: center;
+    padding: 28px; border-radius: 12px; margin-bottom: 24px;
+    border: 1px solid var(--border);
+  }
+  .light { background: #ffffff; }
+  .dark  { background: #0f1115; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cell span { font-size: 12px; }
+  .light .cell span { color: #6b7280; }
+  .dark  .cell span { color: #9aa3b2; }
+  .dark .mono { color: var(--accent); }
+  .light .mono { color: #2f6fe0; }
+  code, pre {
+    font-family: Consolas, "JetBrains Mono", monospace;
+    font-size: 12.5px; line-height: 1.7;
+  }
+  pre {
+    background: #15181e; color: #d6e2ff; border-radius: 10px;
+    padding: 18px 20px; overflow-x: auto; margin-bottom: 24px;
+  }
+  .badge-demo {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 8px 16px 8px 10px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <h1>Zwico Logo 使用示例</h1>
+  <p class="sub">public/logo.svg（全彩徽章）/ public/logo-mono.svg（单色 currentColor）</p>
+
+  <div class="row light">
+    <div class="cell"><img src="./logo.svg" width="128" height="128" alt="Zwico"><span>128</span></div>
+    <div class="cell"><img src="./logo.svg" width="64" height="64" alt="Zwico"><span>64</span></div>
+    <div class="cell"><img src="./logo.svg" width="32" height="32" alt="Zwico"><span>32</span></div>
+    <div class="cell"><img src="./logo.svg" width="16" height="16" alt="Zwico"><span>16</span></div>
+    <div class="cell"><img class="mono" src="./logo-mono.svg" width="48" height="48" alt="mono"><span>mono 48</span></div>
+    <div class="cell"><span class="badge-demo"><img src="./logo.svg" width="24" height="24" alt="">Zwico</span><span>标题栏组合</span></div>
+  </div>
+
+  <div class="row dark">
+    <div class="cell"><img src="./logo.svg" width="128" height="128" alt="Zwico"><span>128</span></div>
+    <div class="cell"><img src="./logo.svg" width="64" height="64" alt="Zwico"><span>64</span></div>
+    <div class="cell"><img src="./logo.svg" width="32" height="32" alt="Zwico"><span>32</span></div>
+    <div class="cell"><img src="./logo.svg" width="16" height="16" alt="Zwico"><span>16</span></div>
+    <div class="cell"><img class="mono" src="./logo-mono.svg" width="48" height="48" alt="mono"><span>mono 48</span></div>
+    <div class="cell"><span class="badge-demo"><img src="./logo.svg" width="24" height="24" alt="">Zwico</span><span>标题栏组合</span></div>
+  </div>
+
+  <h1 style="font-size:16px">页面引用代码</h1>
+<pre>&lt;!-- 1. React 组件内（Vite，文件放 public/ 下按根路径引用） --&gt;
+&lt;img src="/logo.svg" width="24" height="24" alt="Zwico" /&gt;
+
+&lt;!-- 2. 标题栏 / 关于页组合 --&gt;
+&lt;span style="display:inline-flex;align-items:center;gap:8px"&gt;
+  &lt;img src="/logo.svg" width="20" height="20" alt="" /&gt;
+  &lt;b&gt;Zwico&lt;/b&gt;
+&lt;/span&gt;
+
+&lt;!-- 3. favicon（index.html） --&gt;
+&lt;link rel="icon" type="image/svg+xml" href="/logo.svg" /&gt;
+
+&lt;!-- 4. 单色变体：颜色随 CSS currentColor / color 继承 --&gt;
+&lt;img class="mono" src="/logo-mono.svg" width="20" height="20" alt="" /&gt;
+&lt;style&gt;.mono { color: var(--accent); }&lt;/style&gt;</pre>
+</body>
+</html>
