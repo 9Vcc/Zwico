@@ -58,7 +58,7 @@ const zh: Record<string, string> = {
   "mode.custom": "自定义图标目录",
   "mode.system.hint": "按扩展名类型映射到 Windows 内置图标：代码 / 文本、HTML、XML、图片、批处理等（推荐）",
   "mode.app.hint": "统一使用 Zed 主程序自带的图标（可执行文件的第一个图标）",
-  "mode.custom.hint": "在图标目录中查找 <扩展名>.ico（如 py.ico）；缺失时自动使用目录内的 default.ico，仍缺失才回退系统图标",
+  "mode.custom.hint": "在图标目录中查找 <扩展名>.ico 或 .png（如 py.ico、py.png）；缺失时自动使用目录内的 default.ico，仍缺失才回退系统图标",
   "mode.needsZed": "需要先在设置中指定 Zed 可执行文件",
 
   // ---- 列表 ----
@@ -133,9 +133,11 @@ const zh: Record<string, string> = {
   "zed.notFound.mode": "「Zed 应用图标」模式不可用",
   "field.iconSource": "图标来源",
   "field.iconDir": "图标目录",
+  "iconDir.useDefault": "使用默认目录",
+  "iconDir.useDefault.tip": "清空自定义路径，改用应用目录下的 icon 文件夹",
   "iconDir.browse": "浏览…",
   "iconDir.browse.tip": "选择包含 <扩展名>.ico 文件的文件夹",
-  "iconDir.placeholder": "包含 <扩展名>.ico 文件的目录",
+  "iconDir.placeholder": "包含 <扩展名>.ico/.png 文件的目录（留空 = 默认 icon 目录）",
   "iconDir.none": "未设置目录，将回退系统图标",
   "iconDir.unreadable": "目录不可读",
   "iconDir.unreadable.tip": "目录不存在或无法读取",
@@ -516,7 +518,7 @@ const en: Record<string, string> = {
   "mode.custom": "Custom icon folder",
   "mode.system.hint": "Map each extension to a Windows built-in icon by type: code / text, HTML, XML, images, scripts, etc. (recommended)",
   "mode.app.hint": "Use the icon embedded in the Zed executable for every extension",
-  "mode.custom.hint": "Looks up <extension>.ico in your folder (e.g. py.ico); missing ones use default.ico in the folder, and only then fall back to built-in icons",
+  "mode.custom.hint": "Looks up <extension>.ico or .png in your folder (e.g. py.ico, py.png); missing ones use default.ico in the folder, and only then fall back to built-in icons",
   "mode.needsZed": "Specify the Zed executable in settings first",
 
   // ---- List ----
@@ -591,9 +593,11 @@ const en: Record<string, string> = {
   "zed.notFound.mode": "\"Zed application icon\" mode is unavailable",
   "field.iconSource": "Icon source",
   "field.iconDir": "Icon folder",
+  "iconDir.useDefault": "Use default folder",
+  "iconDir.useDefault.tip": "Clears the custom path and uses the icon folder next to the app",
   "iconDir.browse": "Browse…",
   "iconDir.browse.tip": "Choose the folder containing <extension>.ico files",
-  "iconDir.placeholder": "Folder containing <extension>.ico files",
+  "iconDir.placeholder": "Folder with <extension>.ico/.png files (empty = default icon folder)",
   "iconDir.none": "No folder set; built-in icons will be used",
   "iconDir.unreadable": "Folder unreadable",
   "iconDir.unreadable.tip": "The folder does not exist or cannot be read",

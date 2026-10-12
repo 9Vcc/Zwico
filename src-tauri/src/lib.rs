@@ -567,11 +567,18 @@ async fn apply_icons(
         // 2. 批量写入
         let zed = PathBuf::from(zed_path.trim());
         let custom = custom_dir.map(PathBuf::from);
+        // PNG 图标包装为 ICO 后的缓存目录（DefaultIcon 只认 ICO）
+        let generated = app
+            .path()
+            .app_data_dir()
+            .ok()
+            .map(|dir| dir.join("generated-icons"));
         let report = icon::batch_set_icons(
             &targets,
             mode,
             &zed,
             custom.as_deref(),
+            generated.as_deref(),
             |target, done, total| {
                 if let Err(err) = window.emit(
                     "progress",
@@ -844,6 +851,40 @@ async fn is_autostart_enabled(app: AppHandle) -> Result<bool, String> {
     app.autolaunch()
         .is_enabled()
         .map_err(|err| encoded("back.autostartFailed", &[err.to_string()]))
+}
+
+/// 默认自定义图标目录：可执行文件同级的 icon 文件夹
+///
+/// dev 场景的可执行文件在 target\debug 下没有 icon —— 依次尝试 CWD 及其
+/// 父目录（dev 的 CWD 通常是 src-tauri，父目录即项目根，那里有 icon）。
+#[tauri::command]
+async fn default_icon_dir(app: AppHandle) -> Result<String, String> {
+    let exe = std::env::current_exe()
+        .map_err(|err| encoded("back.appDataDir", &[err.to_string()]))?;
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = exe.parent() {
+        candidates.push(dir.join("icon"));
+    }
+    if let Ok(res) = app.path().resource_dir() {
+        candidates.push(res.join("icon"));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("icon"));
+        if let Some(parent) = cwd.parent() {
+            candidates.push(parent.join("icon"));
+        }
+    }
+    // 第一个真实存在的目录优先；都不存在时回退 exe 同级（用户可自行创建）
+    let fallback = candidates
+        .first()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("icon"));
+    Ok(candidates
+        .iter()
+        .find(|candidate| candidate.is_dir())
+        .unwrap_or(&fallback)
+        .display()
+        .to_string())
 }
 
 /// 开始拖动窗口（自定义标题栏的拖拽区）
@@ -1228,7 +1269,8 @@ pub fn run() {
             start_window_drag,
             window_is_maximized,
             set_autostart,
-            is_autostart_enabled
+            is_autostart_enabled,
+            default_icon_dir,
         ])
         .on_window_event(|window, event| match event {
             // 关闭 = 隐藏到托盘（常驻后台，任务继续跑）；退出只能通过托盘菜单。

@@ -442,9 +442,82 @@ fn render_uncached(value: &str, size: u32) -> Option<String> {
     Some(format!("data:image/png;base64,{}", base64_encode(&png)))
 }
 
+/// 把 PNG 包装为 ICO 容器（Vista+ 支持 PNG 压缩条目）
+///
+/// Windows 的 `DefaultIcon` 只认 `.ico` / `.exe` / `.dll`，不认裸 PNG ——
+/// 用户图标目录里的 `<扩展名>.png` 必须包装成 ICO 才能写入关联。
+/// PNG 数据**原样**嵌入（不解码不缩放），宽高取自 IHDR（超 256 拒绝，
+/// 因为 ICO 条目的宽高字段各只有 1 字节，256 用 0 表示）。
+pub fn png_to_ico(png: &[u8]) -> Result<Vec<u8>, String> {
+    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if png.len() < 24 || png[..8] != *PNG_SIGNATURE {
+        return Err("不是有效的 PNG 文件".to_string());
+    }
+    // IHDR：宽 16..20、高 20..24（大端）
+    let width = u32::from_be_bytes(png[16..20].try_into().unwrap_or([0, 0, 0, 0]));
+    let height = u32::from_be_bytes(png[20..24].try_into().unwrap_or([0, 0, 0, 0]));
+    if width == 0 || height == 0 || width > 256 || height > 256 {
+        return Err(format!("PNG 尺寸 {width}×{height} 超出 ICO 支持（1–256）"));
+    }
+    let entry_width = if width == 256 { 0u8 } else { width as u8 };
+    let entry_height = if height == 256 { 0u8 } else { height as u8 };
+
+    let mut out = Vec::with_capacity(22 + png.len());
+    // ICONDIR：保留字 0、类型 1（图标）、数量 1
+    out.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
+    // ICONDIRENTRY：宽、高、色数 0、保留 0、色面 1、位深 32
+    out.extend_from_slice(&[entry_width, entry_height, 0, 0, 1, 0, 32, 0]);
+    out.extend_from_slice(&(png.len() as u32).to_le_bytes());
+    out.extend_from_slice(&22u32.to_le_bytes());
+    out.extend_from_slice(png);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 构造一个仅含头部的最小 PNG（够 png_to_ico 读取尺寸）
+    fn fake_png(width: u32, height: u32) -> Vec<u8> {
+        let mut png = Vec::new();
+        png.extend_from_slice(b"\x89PNG\r\n\x1a\n");
+        png.extend_from_slice(&[0, 0, 0, 13]);
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&width.to_be_bytes());
+        png.extend_from_slice(&height.to_be_bytes());
+        png.extend_from_slice(&[8, 6, 0, 0, 0]);
+        png.extend_from_slice(&[0u8; 64]);
+        png
+    }
+
+    /// PNG 包装为 ICO：头、条目尺寸与偏移正确，图像数据原样保留
+    #[test]
+    fn png_wraps_into_ico() {
+        let png = fake_png(64, 48);
+        let ico = png_to_ico(&png).unwrap();
+        assert_eq!(&ico[..6], &[0, 0, 1, 0, 1, 0]);
+        assert_eq!(ico[6], 64);
+        assert_eq!(ico[7], 48);
+        let bytes_in_res = u32::from_le_bytes(ico[14..18].try_into().unwrap());
+        assert_eq!(bytes_in_res as usize, png.len());
+        let offset = u32::from_le_bytes(ico[18..22].try_into().unwrap());
+        assert_eq!(offset as usize, 22);
+        assert_eq!(&ico[22..], &png[..]);
+    }
+
+    /// 256×256 在条目里用 0 表示；超尺寸拒绝
+    #[test]
+    fn png_ico_size_rules() {
+        let ico = png_to_ico(&fake_png(256, 256)).unwrap();
+        assert_eq!(&ico[6..8], &[0, 0]);
+        assert!(png_to_ico(&fake_png(300, 100)).is_err());
+    }
+
+    /// 非 PNG 数据拒绝
+    #[test]
+    fn png_ico_rejects_garbage() {
+        assert!(png_to_ico(b"not a png").is_err());
+    }
 
     fn solid(width: u32, height: u32, rgba: [u8; 4]) -> Rgba {
         let mut data = Vec::with_capacity((width * height * 4) as usize);

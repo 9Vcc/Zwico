@@ -224,6 +224,7 @@ pub fn resolve_icon_value(
     zed_path: &Path,
     custom_dir: Option<&Path>,
     per_item_icon: Option<&str>,
+    generated_dir: Option<&Path>,
 ) -> IconOutcome {
     let system = || IconOutcome {
         value: system_icon_for(extension),
@@ -261,39 +262,72 @@ pub fn resolve_icon_value(
         },
 
         IconMode::Custom => {
-            // 解析顺序：`<扩展名>.ico` → 目录内 `default.ico` → 系统图标。
-            // default.ico 命中视为正常生效（不记回退，也不写 note —— 这是用户
-// 主动放置的统一兜底图标，属预期行为而非异常）。
-            match custom_dir {
-                Some(dir) => {
-                    let ico = dir.join(format!("{extension}.ico"));
-                    if ico.is_file() {
-                        IconOutcome {
-                            value: quoted_icon(&ico),
-                            fell_back: false,
-                            note: None,
-                        }
-                    } else {
-                        let fallback = dir.join("default.ico");
-                        if fallback.is_file() {
-                            IconOutcome {
-                                value: quoted_icon(&fallback),
-                                fell_back: false,
-                                note: None,
+            // 解析顺序：`<扩展名>.ico` → `<扩展名>.png`（自动包装为 ICO）→
+            // `default.ico` → `default.png` → 系统图标。
+            // default 命中视为正常生效（不记回退）—— 它是用户主动放置的统一兜底。
+            let Some(dir) = custom_dir else {
+                let mut outcome = system();
+                outcome.note = Some("未设置图标目录".to_string());
+                return outcome;
+            };
+
+            // 在目录中按顺序查找：<name>.ico → <name>.png（包装为 ICO 写入缓存目录）
+            let find_icon = |name: &str| -> Option<String> {
+                let ico = dir.join(format!("{name}.ico"));
+                if ico.is_file() {
+                    return Some(ico.display().to_string());
+                }
+                let png = dir.join(format!("{name}.png"));
+                if !png.is_file() {
+                    return None;
+                }
+                // DefaultIcon 不认 PNG：包装为 ICO 条目后落到缓存目录
+                let Some(gen_dir) = generated_dir else {
+                    println!("[图标] {name}.png 缺少缓存目录配置，无法使用（忽略）");
+                    return None;
+                };
+                let data = match std::fs::read(&png) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        println!("[图标] 读取 {name}.png 失败：{err}");
+                        return None;
+                    }
+                };
+                match crate::iconrender::png_to_ico(&data) {
+                    Ok(ico_data) => {
+                        let target = gen_dir.join(format!("{name}.ico"));
+                        match std::fs::write(&target, &ico_data) {
+                            Ok(()) => Some(target.display().to_string()),
+                            Err(err) => {
+                                println!("[图标] 写入 {name}.ico 缓存失败：{err}");
+                                None
                             }
-                        } else {
-                            let mut outcome = system();
-                            outcome.note = Some(format!("图标目录中没有 {extension}.ico"));
-                            outcome
                         }
                     }
+                    Err(err) => {
+                        println!("[图标] {name}.png 转换失败：{err}");
+                        None
+                    }
                 }
-                None => {
-                    let mut outcome = system();
-                    outcome.note = Some("未设置图标目录".to_string());
-                    outcome
-                }
+            };
+
+            if let Some(icon_path) = find_icon(extension) {
+                return IconOutcome {
+                    value: quoted_icon(Path::new(&icon_path)),
+                    fell_back: false,
+                    note: None,
+                };
             }
+            if let Some(icon_path) = find_icon("default") {
+                return IconOutcome {
+                    value: quoted_icon(Path::new(&icon_path)),
+                    fell_back: false,
+                    note: None,
+                };
+            }
+            let mut outcome = system();
+            outcome.note = Some(format!("图标目录中没有 {extension}.ico"));
+            outcome
         }
     }
 }
@@ -310,6 +344,7 @@ pub fn set_icon(
     mode: IconMode,
     zed_path: &Path,
     custom_dir: Option<&Path>,
+    generated_dir: Option<&Path>,
 ) -> Result<IconOutcome> {
     if !registry::key_exists(&target.prog_id)? {
         return Err(anyhow!("{}", encoded_str("back.progIdGone", &[&target.prog_id])));
@@ -322,6 +357,7 @@ pub fn set_icon(
         zed_path,
         custom_dir,
         target.custom_icon.as_deref(),
+        generated_dir,
     );
 
     registry::set_default_value(&format!("{}\\DefaultIcon", target.prog_id), &outcome.value)?;
@@ -358,6 +394,7 @@ pub fn batch_set_icons(
     mode: IconMode,
     zed_path: &Path,
     custom_dir: Option<&Path>,
+    generated_dir: Option<&Path>,
     progress_cb: impl Fn(&IconTarget, usize, usize),
 ) -> BatchReport {
     let total = targets.len();
@@ -368,7 +405,7 @@ pub fn batch_set_icons(
 
     for (index, target) in targets.iter().enumerate() {
         progress_cb(target, index, total);
-        match set_icon(target, mode, zed_path, custom_dir) {
+        match set_icon(target, mode, zed_path, custom_dir, generated_dir) {
             Ok(outcome) => {
                 report.applied += 1;
                 if outcome.fell_back {
@@ -530,20 +567,20 @@ mod tests {
 
         // py.ico 不存在 → 使用 default.ico（正常生效，不算回退）
         let outcome =
-            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None, None);
         assert_eq!(outcome.value, quoted_icon(&default));
         assert!(!outcome.fell_back);
 
         // 有专属图标时优先专属
         std::fs::write(dir.join("py.ico"), b"dummy-py").unwrap();
         let outcome =
-            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None, None);
         assert_eq!(outcome.value, quoted_icon(&dir.join("py.ico")));
 
         // 连 default.ico 都没有 → 回退系统图标
         std::fs::remove_file(&default).unwrap();
         let outcome =
-            resolve_icon_value("js", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+            resolve_icon_value("js", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None, None);
         assert!(outcome.fell_back);
 
         std::fs::remove_dir_all(&dir).unwrap();
@@ -554,16 +591,16 @@ mod tests {
     fn resolve_modes_and_fallback() {
         let zed = Path::new(r"C:\fake\zed.exe");
 
-        let sys = resolve_icon_value("py", IconMode::System, zed, None, None);
+        let sys = resolve_icon_value("py", IconMode::System, zed, None, None, None);
         assert_eq!(sys.value, "imageres.dll,-102");
         assert!(!sys.fell_back);
 
-        let app = resolve_icon_value("py", IconMode::App, zed, None, None);
+        let app = resolve_icon_value("py", IconMode::App, zed, None, None, None);
         assert_eq!(app.value, r#""C:\fake\zed.exe",0"#);
         assert!(!app.fell_back);
 
         // Custom 未给目录 → 回退 + 原因
-        let custom = resolve_icon_value("py", IconMode::Custom, zed, None, None);
+        let custom = resolve_icon_value("py", IconMode::Custom, zed, None, None, None);
         assert_eq!(custom.value, "imageres.dll,-102");
         assert!(custom.fell_back);
         assert!(custom.note.is_some());
@@ -575,6 +612,7 @@ mod tests {
             zed,
             None,
             Some(r"C:\__no_such_dir__\py.ico"),
+            None,
         );
         assert!(per_item.fell_back);
         assert!(per_item.note.unwrap().contains(r"C:\__no_such_dir__"));

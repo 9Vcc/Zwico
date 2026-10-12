@@ -344,6 +344,8 @@ export default function App() {
                   onModeChange={store.setMode}
                   onCustomDirChange={store.setCustomDir}
                   onPickCustomDir={() => void store.pickCustomDir()}
+                  onUseDefaultDir={() => store.setCustomDir("")}
+                  defaultIconDir={store.defaultIconDir}
                   onOpenSettings={() => store.setView("settings")}
                 />
               </div>

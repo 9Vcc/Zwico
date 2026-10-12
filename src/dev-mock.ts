@@ -196,6 +196,7 @@ export function installDevMock(): boolean {
       })),
     openDefaultAppsSettings: async () => undefined,
     isAutostartEnabled: async () => false,
+    defaultIconDir: async () => "D:////mock////icon",
     setAutostart: async () => undefined,
     inspectApplicationRegistration: async () => ({ registered: false, covered: 0 }),
     registerApplication: async () => [

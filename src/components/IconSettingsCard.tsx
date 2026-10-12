@@ -18,6 +18,8 @@ export function IconSettingsCard({
   onModeChange,
   onCustomDirChange,
   onPickCustomDir,
+  onUseDefaultDir,
+  defaultIconDir,
   onOpenSettings,
 }: {
   zedPath: string | null;
@@ -29,6 +31,9 @@ export function IconSettingsCard({
   onModeChange: (mode: IconMode) => void;
   onCustomDirChange: (value: string) => void;
   onPickCustomDir: () => void;
+  onUseDefaultDir: () => void;
+  /** 默认自定义图标目录（后端探测；input 留空时生效） */
+  defaultIconDir: string;
   onOpenSettings: () => void;
 }) {
   return (
@@ -79,6 +84,15 @@ export function IconSettingsCard({
             <button
               type="button"
               className="btn btn--mini"
+              data-tip="清空自定义路径，改用应用目录下的 icon 文件夹"
+              disabled={customDir.trim() === ""}
+              onClick={onUseDefaultDir}
+            >
+              {t("iconDir.useDefault")}
+            </button>
+            <button
+              type="button"
+              className="btn btn--mini"
               data-tip={t("iconDir.browse.tip")}
               onClick={onPickCustomDir}
             >
@@ -88,7 +102,7 @@ export function IconSettingsCard({
           </div>
           <input
             className="input"
-            placeholder={t("iconDir.placeholder")}
+            placeholder={defaultIconDir || t("iconDir.placeholder")}
             value={customDir}
             onChange={(e) => onCustomDirChange(e.target.value)}
           />

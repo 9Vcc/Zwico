@@ -131,6 +131,8 @@ export function useAppStore() {
   const [scanning, setScanning] = useState(false);
   /** 关注列表各扩展名的关联状态（设置页诊断） */
   const [extStatus, setExtStatus] = useState<Record<string, ExtStatus>>({});
+  /** 默认自定义图标目录（应用目录下的 icon 文件夹，后端探测） */
+  const [defaultIconDir, setDefaultIconDir] = useState("");
   /** 开机自启动（以系统实际状态为准） */
   const [autostart, setAutostartEnabled] = useState(false);
 
@@ -419,6 +421,17 @@ export function useAppStore() {
     }
   }, [appendLogs, channel, fail, refreshAppReg, succeed]);
 
+  // 默认图标目录：后端探测（安装目录 / 资源目录 / 开发目录）
+  useEffect(() => {
+    api
+      .defaultIconDir()
+      .then(setDefaultIconDir)
+      .catch(() => {});
+  }, []);
+
+  // 生效的自定义目录：配置为空 = 跟随默认目录（配置不写回，用户清空即"跟随默认"）
+  const effectiveCustomDir = customDir.trim() === "" ? defaultIconDir : customDir;
+
   // 首次加载查询一次真实状态（自启动由系统管理，不存应用配置避免不同步）
   useEffect(() => {
     api
@@ -519,7 +532,7 @@ export function useAppStore() {
           targets,
           mode,
           zedPath ?? "",
-          customDir.trim() === "" ? null : customDir.trim(),
+          effectiveCustomDir.trim() === "" ? null : effectiveCustomDir.trim(),
         );
         appendLogs(lines);
         succeed(successText);
@@ -532,7 +545,18 @@ export function useAppStore() {
         await refreshUndoStatus();
       }
     },
-    [appendLogs, channel, customDir, fail, load, mode, push, refreshUndoStatus, succeed, zedPath],
+    [
+      appendLogs,
+      channel,
+      effectiveCustomDir,
+      fail,
+      load,
+      mode,
+      push,
+      refreshUndoStatus,
+      succeed,
+      zedPath,
+    ],
   );
 
   const applySelected = useCallback(() => {
@@ -564,6 +588,20 @@ export function useAppStore() {
       await refreshUndoStatus();
     }
   }, [appendLogs, channel, fail, load, push, refreshUndoStatus, selectedList, succeed, toTargets]);
+
+  /** 自定义模式：启动 / 切模式 / 换目录时自动重新应用一次图标（含系统通知） */
+  const lastAutoApply = useRef("");
+  useEffect(() => {
+    if (!loaded || busy) return;
+    if (mode !== "custom") return;
+    if (effectiveCustomDir.trim() === "") return;
+    const key = `${channel}|${effectiveCustomDir}`;
+    if (lastAutoApply.current === key) return;
+    lastAutoApply.current = key;
+    void applyAll();
+    // applyAll 的引用变化不重跑：load 后 associations 换新引用会让 applyAll
+    // 重建，这里靠 key 拦截重复应用，避免死循环
+  }, [loaded, busy, mode, channel, effectiveCustomDir, applyAll]);
 
   /** 一键修复失效图标：按当前模式重设所有 iconState === "missing" 的项 */
   const repairInvalid = useCallback(() => {
@@ -724,7 +762,7 @@ export function useAppStore() {
     }
     let cancelled = false;
     void api
-      .scanIcoCount(customDir)
+      .scanIcoCount(effectiveCustomDir)
       .then((count) => {
         if (!cancelled) setIcoCount(count);
       })
@@ -734,7 +772,7 @@ export function useAppStore() {
     return () => {
       cancelled = true;
     };
-  }, [mode, customDir]);
+  }, [mode, effectiveCustomDir]);
 
   // 图标预览：把列表里出现的 DefaultIcon 值去重后逐个渲染
   // （同一个值只请求一次，后端还有一层缓存，因此通常只发个位数请求）
@@ -877,6 +915,8 @@ export function useAppStore() {
     extStatus,
     appReg,
     autostart,
+    defaultIconDir,
+    effectiveCustomDir,
     perExtension,
     sidebarWidth,
     logHeight,

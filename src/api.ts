@@ -156,6 +156,8 @@ export const api = {
   windowClose: () => invoke<void>("window_close"),
   setAutostart: (enable: boolean) => invoke<void>("set_autostart", { enable }),
   isAutostartEnabled: () => invoke<boolean>("is_autostart_enabled"),
+  /** 默认自定义图标目录（应用目录下的 icon 文件夹，后端探测） */
+  defaultIconDir: () => invoke<string>("default_icon_dir"),
   startWindowDrag: () => invoke<void>("start_window_drag"),
   windowIsMaximized: () => invoke<boolean>("window_is_maximized"),
 };
