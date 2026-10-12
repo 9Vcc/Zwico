@@ -49,7 +49,7 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 
 ### D1 · 注册表访问收口到 `registry.rs`
 
-六个函数（`get_default_value`/`set_default_value`/`create_key`/`delete_key`/`key_exists`/`list_subkeys`），调用方只传相对 `Software\Classes` 的路径。路径拼接、"不存在"判定（`is_not_found`，`registry.rs:32`，按 HRESULT 0x80070002 比裸值）、错误上下文（`reg_error` 带完整键路径）只写一次。
+五个函数（`get_default_value`/`set_default_value`/`delete_key`/`key_exists`/`list_subkeys`），调用方只传相对 `Software\Classes` 的路径。路径拼接、"不存在"判定（`is_not_found`，`registry.rs:32`，按 HRESULT 0x80070002 比裸值）、错误上下文（`reg_error` 带完整键路径）只写一次。
 **代价**：新语义要先扩 `registry.rs`。`zed.rs:143`（卸载表）与 `association.rs:107`（`FileExts`）是已批准的两处例外，新增例外要记入本文。
 
 ### D2 · 关联枚举"双源合并"，ProgID 归属三规则
@@ -138,6 +138,44 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 - **代价**：exe 体积/内存上升；依赖 WebView2 运行时；前后端协议成为新维护面（`api.ts` ↔ `lib.rs` 要同步）。
 - **被否决的备选**：留在 egui（样式上限低）；GPUI（2026 年仍无稳定 API/文档，迁移面不比 Tauri 小）。
 
+### D18 · 五个逻辑模块已相对 egui 版分叉（原"逐字节复用"不再成立）
+
+2026-10-12 的缺陷修复动了这三个模块，其余函数仍逐字节相同：
+
+- `icon.rs`：批量接口返回 `BatchReport`（成功/回退/失败明细）；新增逐项图标、`IconState` 与 DefaultIcon 值解析；写前校验 ProgID 键仍存在
+- `association.rs`：`Software\Classes` 由枚举两次改为一次；扩展名与前缀统一小写比较；新增 `icon_state` 与 `shared_with`
+- `zed.rs`：`owns_prog_id` 三条规则统一小写比较；新增 `as_key`/`from_key`
+
+**后果**：两仓库不再能整文件复制同步，§6 待决 2（单一来源）由"要不要做"升级为"**必须做**"——建议抽 `crates/rsicon-core`，两套 UI 共用同一份源码。
+
+### D19 · busy 由 RAII 守卫持有，只读命令不置 busy
+
+`lib.rs` 的 `BusyGuard`：`acquire()` 置忙并返回守卫，`Drop` 复位。
+**原因**：早期实现把 `store(false)` 写在 `spawn_blocking(...).await?` **之后**，join 失败（任务 panic）时提前返回 → 标志永久为 true → 此后每次关窗都被 `prevent_close` 拦下。
+**配套**：`bootstrap` / `load_state` / `scan_ico_count` / `undo_status` 不置 busy；"读"不该阻塞关窗，界面禁用视觉由前端自己的 busy 状态控制（两者解耦）。
+
+### D20 · 新能力的落点与边界
+
+| 能力 | 命令 / 落点 | 边界 |
+|---|---|---|
+| 图标失效检测 | `load_state` 返回 `iconState`；判定在 `icon.rs:inspect_icon_value` | 只读判断，不改写 |
+| 一键修复失效图标 | 复用 `apply_icons`（前端筛出失效项） | 按**当前来源**重设，不猜原始来源 |
+| 写入前快照 + 撤销 | `undo_status` / `undo_last`，快照存应用数据目录 `undo.json` | **一次性**使用；不改注册表以外的用户文件 |
+| 逐项图标 | `TargetDto.customIcon` → `resolve_icon_value` 最高优先级 | 文件不存在时回退系统图标并计入回退清单 |
+| 预设导入导出 | `save_preset_file` / `load_preset_file` | 仅接受 `.json`、上限 1 MiB；导入只改界面配置，**需用户显式「应用」才写注册表** |
+| 写入后自动通知 | `apply_icons` / `remove_icons` 末尾调 `refresh::notify_system` | 只有广播通知是自动的；清缓存与重启 Explorer 仍需显式触发并确认（D9 不变） |
+
+**为何只有通知可以自动**：`SHChangeNotify` 无副作用；清缓存与重启 Explorer 属破坏性/可见副作用操作，按 AGENTS §3.5 必须由用户显式触发。
+
+### D21 · UI 重构后的前端约定
+
+- **分层**：`api.ts`（协议）→ `lib/*`（纯函数）→ `hooks/*`（状态与副作用）→ `components/*`（纯展示）。状态只存在于 `useAppStore` 一处，组件只收 props、只回调。
+- **布局**：三行 grid（顶栏 / 主区 / 日志）；主区三列 = 列表 `--sidebar-w` + 6px 拖拽条 + 内容区。
+- **响应式**：卡片用 `auto-fit minmax(310px, 1fr)` 承担主要自适应（不依赖 JS 断点）；`<1080px` 收紧卡片与内边距，`<900px` 侧栏收窄到 `min(230px, 38vw)`、隐藏拖拽条、日志降到 124px，窗口高度 `<620px` 时日志再降到 104px。
+- **反馈**：每个异步动作都有「忙碌指示 + 进度条 + 浮层提示 + 日志」四重反馈；失败统一走 `fail()`（同时写浮层与错误日志）。
+- **配置持久化**：`localStorage` 的 `rsicon-config-v1` 保存主题、来源模式、图标目录、逐项图标、两个开关、侧栏宽度、日志折叠态（D16 只存了主题）。
+- **开发预览**：`src/dev-mock.ts` 仅在 DEV 且检测不到 Tauri 运行时时装入假数据，便于只调试界面；支持 `?theme=light` / `?log=collapsed` / `?sidebar=360` 覆盖形态。生产构建会移除该分支。
+
 ---
 
 ## 5. 已知限制
@@ -146,17 +184,20 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 |---|---|---|
 | `bundle.active = false` | 只产出 exe，不出 msi/nsis 安装包 | `tauri.conf.json:29` |
 | exe 图标为占位 | `app-icon.png`（1024 源图）可替换后 `pnpm tauri icon app-icon.png` 重生成 | README |
-| 侧栏宽度固定 35% | 旧 egui 版可拖拽（240–560px），本版未实现 | `styles.css:282` |
-| 日志面板"复制/清空"未经人工点验 | 自动化合成点击在该区域打不中；剪贴板链路已用启动探针证明可用 | `App.tsx:723` |
-| 忙碌态未经真机实测 | 进度条/全禁用/关窗确认需一次真实写入才能触发 | 需用户操作一次 |
-| 双仓库逻辑同步 | `src-tauri` 的五个模块是复制品，改一边要手动同步另一边 | 见 §6 待决 2 |
-| 除主题外无配置持久化 | 通道自动选、目录/模式每次回默认 | `App.tsx:30` |
+| **UI 重构未做真机截图验证** | 类型检查、构建、类名/变量交叉校验均通过，但视觉与手感需跑一次 `pnpm tauri dev` 确认 | 2026-10-12 重构 |
+| 忙碌态与关窗确认未真机验证 | 需一次真实写入才能触发；dev 下可复现 | 需用户操作一次 |
+| 日志面板"复制/清空"未真机点验 | 自动化合成点击在该区域打不中 | `LogPanel.tsx` |
+| 双仓库逻辑同步已失效 | 五个模块出现分叉，不再可整文件复制 | D18 / §6 待决 2 |
+| `csp` 仍为 null | 未启用内容安全策略（需能真机验证 IPC 放行后再开，否则可能白屏） | `tauri.conf.json:25` |
+| 共享 ProgID 无法逐项隔离 | 仍按 D3 只做提示 + 影响面量化 | D3 / D20 |
 
 ---
 
 ## 6. 待决问题
 
-1. `icon/md.ico` 的用途（旧仓库遗留：exe 图标 vs Custom 样例目录）——Tauri 版已有自己的占位图标，问题只剩"要不要把旧样例目录迁过来"。
-2. **旧仓库（`E:\1Qoder\RsIcon`，egui 版）的去留**：目前保留为参考实现；五个逻辑模块的"单一来源"要不要改为在新仓库维护、旧仓库只读——未定。
-3. `lib.rs:16` `#![allow(dead_code)]`：`create_key`/`refresh_full` 等仍未接线，删属性会暴露告警，需逐个决定。
-4. 命名统一：`productName = zed-file-assoc-gui`（`tauri.conf.json:3`）≠ 目录名 `RsIcon-tauri` ≠ cargo 包名 `rsicon-tauri` ≠ 窗口标题，要一次定。
+1. `icon/md.ico` 的用途（旧仓库遗留）——Tauri 版已有自己的占位图标，问题只剩"要不要把旧样例目录迁过来"。
+2. **单一来源必须落地**：五个模块已分叉（D18），建议抽 `crates/rsicon-core` 让两套 UI 共用；落地前不要并行修改两边的同名模块。
+3. 命名统一：`productName`（`zed-file-assoc-gui`）≠ 目录名 `RsIcon-tauri` ≠ cargo 包名 `rsicon-tauri` ≠ 窗口标题，要一次定。
+4. `bundle.active=false` 下没有安装包产物；若要分发需一并决定是否启用 NSIS 与代码签名。
+5. 启用 CSP 的时机：需同时放行 Tauri IPC（`ipc:` / `http://ipc.localhost`）与内联样式，建议在能真机验证时一次做完，避免白屏。
+

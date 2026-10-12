@@ -26,6 +26,44 @@
 
 ---
 
+## 0.1 修复进展（2026-10-12 更新）
+
+本轮落地了批次 A 全部、批次 B 大部分；改动见 `4257a3d`（后端）与 `90580d3`（前端）。
+
+| 编号 | 项 | 状态 | 落地位置 |
+|---|---|---|---|
+| P0-1 | busy 标志泄漏 | ✅ 已修 | `lib.rs::BusyGuard`（RAII / Drop 复位）；只读命令不再置 busy |
+| P0-2 | release 下回退信息不可见 | ✅ 已修 | `icon.rs::BatchReport`（成功/回退/失败明细）+ 日志行 `level` 三级着色 |
+| P0-3 | 选中计数不一致 | ✅ 已修 | `useAppStore::applyLoaded` 重扫后清理已消失的选中项 |
+| P1 / P2 | 同步命令阻塞主线程 | ✅ 已修 | `bootstrap` / `scan_ico_count` 改 async + `blocking()` |
+| P3 / P4 | 启动两跳 / 重复枚举 | ✅ 已修 | 新增 `bootstrap()` 一次返回；`association` 只枚举一次 Classes |
+| R1 | 搜索大小写敏感 | ✅ 已修 | 前端两侧统一小写；后端扩展名统一归一化为小写 |
+| R2 | 前缀匹配大小写敏感 | ✅ 已修 | `zed.rs::owns_prog_id` 三规则统一小写比较（含新测试） |
+| R3 | 写入未校验 ProgID | ✅ 已修 | `icon.rs::set_icon` / `remove_icon` 写前 `key_exists` |
+| R4 | progress 语义滞后一项 | ✅ 已修 | 回调改为"处理前"触发，`current` 即当前项 |
+| R5 | busy 双份状态 | ⚠️ 部分 | 后端 busy 已收窄到写操作；前后端各一份的结构保留（DESIGN D19） |
+| S5 | `allow(dead_code)` | ✅ 已修 | 删 `create_key` / `refresh_full`，移除该属性 |
+| S4 | 前端单文件 813 行 | ✅ 已修 | 拆为 hooks / lib / components 分层，`App.tsx` 降到约 250 行 |
+| F1 | 图标来源显示 | ✅ 轻量版 | `lib/iconInfo.ts::describeIcon` + 行内标签（真图标渲染未做） |
+| F2 | 失效检测 + 一键修复 | ✅ 已做 | `icon.rs::inspect_icon_value` + 顶部提示条 + 复用 `apply_icons` |
+| F3 | 逐项独立图标 | ✅ 核心 | `TargetDto.customIcon` + 行内"指定图标"按钮（别名映射未做） |
+| F4 | 配置持久化 | ✅ 已做 | `useAppStore` 的 `rsicon-config-v1`（含侧栏宽度与日志折叠） |
+| F5 | 备份 + 撤销 | ✅ 已做 | `capture_snapshot` / `save_undo` / `undo_status` / `undo_last` |
+| F6 | 写入后自动通知 Shell | ✅ 已做 | `apply_icons` / `remove_icons` 末尾调 `notify_system` |
+| F7 | 预设导入导出 | ✅ 已做 | `lib/presets.ts` + `save_preset_file` / `load_preset_file` |
+| F8 | 共享 ProgID 影响面 | ✅ 已做 | `shared_with` + 行内「共享 N」与悬停明细（可选隔离未做） |
+| F10 | 快捷键 / 响应式 / 折叠 | ✅ 已做 | `App.tsx` 快捷键、`styles.css` 断点、日志折叠、侧栏拖拽 |
+| S1 | 双仓库复制 | ⛔ 未做 | 已升级为必须做：抽 `crates/rsicon-core`（DESIGN D18） |
+| S2 | 协议一致性脚本 | ⛔ 未做 | 仍建议加零依赖的 `scripts/check-protocol.mjs` |
+| S6 | CI / rustfmt / 前端 lint | ⛔ 未做 | 仍靠人肉验证清单 |
+| — | 真图标预览（HICON → 位图） | ⛔ 未做 | 需 `SHDefExtractIconW` + 位图编码，属 unsafe 且必须真机验证，留待下一轮 |
+| — | 启用 CSP | ⛔ 未做 | 需真机验证 Tauri IPC 放行，见 DESIGN §6 待决 5 |
+| — | F9 关联登记引导 | ⛔ 未做 | 越界，需先做产品决策 |
+
+**尚未验证的部分**：界面重构未能在本机完成真机截图（环境限制），仅做了 TypeScript 类型检查、Vite 构建、类名/变量交叉校验与 `cargo test`。建议先跑一次 `pnpm tauri dev`，按 AGENTS §6.5 的清单过一遍交互。
+
+---
+
 ## 1. 结构评估
 
 ### 1.1 做得好的部分

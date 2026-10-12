@@ -21,11 +21,15 @@ pnpm build                        # tsc 类型检查 + vite 构建（改前端�
 pnpm tauri dev                    # 开发窗口（vite 热重载；注意可能残留孤儿进程）
 pnpm tauri build --debug          # 可独立运行的 debug exe
 pnpm tauri build                  # release exe（体积优先 profile）
-cd src-tauri && cargo test        # 4 个用例：zed::tests(2) + icon::tests(2)，当前全绿
+cd src-tauri && cargo test        # 17 个用例（zed / icon / association / lib），当前全绿
 cd src-tauri && cargo clippy --all-targets
 ```
 
-截图回归工具：`target/ui-preview/shot.ps1`——未入库，删 `target/` 或 `cargo clean` 会丢；要点（窗口句柄枚举取最大、激活预点击、剪贴板代替键盘输入、WebView 下半区按钮合成点击打不中需改启动探针）记在项目记忆里，可几分钟重建。
+界面调试：`pnpm dev` 后直接用浏览器打开 `http://localhost:1420` 就能看到带假数据的界面（`src/dev-mock.ts` 仅在 DEV 且检测不到 Tauri 运行时时生效），支持 `?theme=light`、`?log=collapsed`、`?sidebar=360` 切换形态。真实行为仍需 `pnpm tauri dev`。
+
+自查脚本（放在 `target/` 下，未入库、`cargo clean` 会丢，需要时几分钟重写）：
+- `target/ui-check/check-classes.mjs`——比对「组件用到的类名 ↔ `styles.css` 定义」与 CSS 变量，能查出类名拼写错误。
+- 旧的 `target/ui-preview/shot.ps1` 截图脚本已随 UI 重构弃用（依赖旧版 DOM 结构）。
 
 ---
 
@@ -34,11 +38,13 @@ cd src-tauri && cargo clippy --all-targets
 1. **只写 `HKCU\Software\Classes`**。禁 HKLM / HKCR / 提权（不要加 manifest、不要 `requestedExecutionLevel`）。
 2. **绝不写 `FileExts\<扩展名>\UserChoice`**（只读，`association.rs:107`）。Windows 对该键有保护，写了要么失败要么破坏用户的默认应用设置。
 3. **注册表路径一律相对路径**，拼 `Software\Classes` 前缀只能发生在 `registry.rs:39`。已批准的例外只有 `zed.rs:143`（卸载表）与 `association.rs:107`（`FileExts`），新增例外要记入 DESIGN.md。
-4. **注册表/耗时操作必须 async + `spawn_blocking`**（`lib.rs` 各命令的固定模式）。同步命令跑在 Tauri 主线程会冻结窗口；前端 `invoke` 本身是异步的，不会阻塞渲染。
+4. **注册表/耗时操作必须 async + `spawn_blocking`**：统一走 `lib.rs::blocking()`，它同时统一处理 join 失败。同步命令跑在 Tauri 主线程会冻结窗口；前端 `invoke` 本身是异步的，不会阻塞渲染。
 5. **`restart_explorer` 与 `delete_key` 是破坏性/可见副作用操作**：只能由用户显式触发且必须经过确认对话框（`App.tsx:765` `DIALOG_TEXT`）。禁止出现在任何"自动流程""启动即执行""测试用例"里。
 6. **不按单一安装形态收窄逻辑**：安装器（`Zed.py`）/「打开方式」（`Applications\ZedG.exe`）/ 系统命名（`md_auto_file`）都要覆盖；自定义图标缺失要**回退并说明**，不要静默跳过或整批失败。
 7. **新增系统能力要改三处**：`src-tauri/Cargo.toml` 依赖、`lib.rs` builder 插件注册、`capabilities/default.json` 权限——少一处只在运行时才报错。
 8. **改前端后必须重新 `pnpm tauri build`**（dist 在编译期嵌入 exe）；`pnpm tauri dev` 不受影响。
+9. **busy 只能经 `BusyGuard` 置位**（RAII，`Drop` 时复位）。不要手写 `store(true/false)`——异常路径（`?` 提前返回、任务 panic）会漏掉复位，此后窗口将永远关不掉。只读命令不置 busy。
+10. **用户可见的信息必须经返回值或事件送到前端**：release 隐藏控制台，`println!` 只是 debug 手段。回退、跳过、失败明细都要出现在日志面板里（`LogLineDto` 的 `level` 分 info/warn/error）。
 
 ---
 
@@ -52,11 +58,13 @@ cd src-tauri && cargo clippy --all-targets
 - 纯函数测试放被测文件底部；依赖本机注册表的用例写成"存在则验证、不存在不失败"（`zed.rs:299`）。
 - DTO 一律 `#[serde(rename_all = "camelCase")]`，前端 `api.ts` 类型与之逐字段对应。
 
-**前端侧：**
+**前端侧（分层见 DESIGN D21）：**
 
-- 颜色一律走 CSS 变量（`styles.css:2` 深 / `:26` 浅），**禁止内联硬编码颜色**；禁用态给显式实色（见 DESIGN D14 的两次踩坑）。
-- 所有可交互控件配 `title` 悬停说明（对齐旧版行为）。
-- 组件保持"纯展示"（props 进、回调出），状态与副作用集中在 `App.tsx:30` 顶部。
+- **状态只存在于 `hooks/useAppStore.ts` 一处**；组件一律"props 进、回调出"，不在组件里 `invoke`、读注册表或碰文件系统。
+- 纯函数（解析、格式化、校验）放 `src/lib/`，便于复用与测试；不要塞进组件。
+- 颜色一律走 CSS 变量（`styles.css` 深 / 浅两套），**禁止内联硬编码颜色**；语义色按 `-soft` / `-border` 成对使用；禁用态给显式实色（DESIGN D14 的两次踩坑）。
+- 所有可交互控件配 `title` 悬停说明；异步动作必须有"忙碌 + 结果"反馈，失败一律经 `fail()`（浮层提示 + 错误日志同时落地）。
+- 新增界面文案用中文；时间格式化统一走 `lib/iconInfo.ts`。
 - 协议改动同步三处：`api.ts` 的类型与封装、`lib.rs` 的 command、DESIGN/PROJECT_MAP 的相关条目。
 
 ---
@@ -65,15 +73,17 @@ cd src-tauri && cargo clippy --all-targets
 
 | 需求 | 落点 |
 |---|---|
-| 新增 Zed 通道 | `zed.rs:16` 枚举 + 五个属性方法 + `zed.rs:275` 用例 + `api.ts:14` CHANNELS |
+| 新增 Zed 通道 | `zed.rs` 的 `Channel` 枚举 + 五个属性方法 + `as_key`/`from_key` + `tests::channel_key_roundtrip` + `api.ts` 的 `CHANNELS` |
 | 新注册表操作语义 | `registry.rs` 加函数，别在调用方直接 `CURRENT_USER` |
-| 关联枚举规则调整 | `association.rs:42`（双源合并）与 `zed.rs:95`（归属三规则） |
-| 新图标模式 / 改映射表 | `icon.rs:32` 枚举 + `icon.rs:166` 取值 + `api.ts:23` MODES + `IconSettingsCard`（`App.tsx:555`） |
-| 新系统图标映射 | `icon.rs:51` match 分支 + `icon.rs:222` 断言 |
-| 新的刷新强度/缓存路径 | `refresh.rs` + `RefreshCard`（`App.tsx:679`）+ `refresh_explorer` 的返回日志行 |
-| 新命令 / 新事件 | `lib.rs`（模式：async + spawn_blocking + camelCase DTO），`api.ts` 加封装；涉及新插件先看 §3.7 |
+| 关联枚举规则调整 | `association.rs::list_associations`（双源合并）与 `zed.rs::owns_prog_id`（归属三规则） |
+| 新图标模式 / 改映射表 | `icon.rs` 的 `IconMode` + `resolve_icon_value` + `api.ts` 的 `MODES` + `components/IconSettingsCard.tsx` |
+| 新系统图标映射 | `icon.rs::system_icon_for` 的 match 分支 + `tests::system_icon_mapping` 断言 |
+| 新的图标状态判定 | `icon.rs::inspect_icon_value` + `components/AssociationList.tsx` 的标签渲染 |
+| 新的刷新强度 / 缓存路径 | `refresh.rs` + `components/ActionCards.tsx::MaintenanceCard` + `refresh_explorer` 返回的日志行 |
+| 新命令 / 新事件 | `lib.rs`（模式：async + `blocking()` + camelCase DTO），`api.ts` 加封装；涉及新插件先看 §3.7 |
 | 界面样式 | `styles.css`（变量优先）+ 对应组件 |
-| 界面结构 / 状态 / 流程 | `App.tsx`（状态在 30 行起，组件在 476 行起） |
+| 界面结构 / 状态 / 流程 | 状态与流程改 `hooks/useAppStore.ts`；纯展示改 `components/*`；布局与快捷键改 `App.tsx` |
+| 新的可撤销写操作 | 参考 `apply_icons`：写前 `capture_snapshot` → 写 → `save_undo`（新写入路径要自己接上） |
 
 ---
 
@@ -81,12 +91,13 @@ cd src-tauri && cargo clippy --all-targets
 
 1. `pnpm build` 类型检查通过；`cd src-tauri && cargo test` 全绿；`cargo clippy --all-targets` 无新增告警。
 2. `pnpm tauri build --debug` 后运行 exe（或 `pnpm tauri dev`）。
-3. **文档行号核验**：三份文档里的 `文件:NNN` 引用逐条对回代码（改前端/后端后行号必漂移；PROJECT_MAP 的裸行号表要单独重排）。可写个一次性核对脚本，别靠眼睛。
-4. 真机回归（截图脚本 `target/ui-preview/shot.ps1`）：
-   - 自动可拍：深浅主题、悬停、整行选中、确认对话框、自定义目录 + `.ico` 计数徽标。
-   - **需人工点一次**：日志面板"复制/清空"（自动化合成点击在该区域打不中，剪贴板链路已用启动探针证明）。
-   - **需人工点一次**：任意一次"应用到选中"覆盖忙碌态（进度条/全禁用/完成后自动重扫）；勾选"重启 Explorer"可顺带验证关窗确认链路（桌面会短暂消失，需用户同意）。
-5. 若动了写入逻辑，用 `reg query` 读回（`<ProgID>\DefaultIcon`、扩展名键、`UserChoice` 的 `ProgId`）确认值与预期格式一致。
+3. **文档一致性**：`PROJECT_MAP.md` 的符号索引要能对上代码（已全部改用符号名，新增模块记得登记）；DESIGN 的新决策要有编号。
+4. 界面自查：`pnpm dev` + 浏览器打开，借助 `dev-mock` 快速核对布局与配色（深浅两套、窄窗口 <900px）；类名一致性可跑 `target/ui-check/check-classes.mjs`。
+5. 真机回归（**必须**，浏览器 mock 覆盖不到 Tauri 行为）：
+   - 需人工点一次：日志"复制/清空"、侧栏拖拽、日志折叠、快捷键（Ctrl+A / Ctrl+Z / Ctrl+R、Esc、Enter）。
+   - 需人工点一次：任意一次"应用到选中"覆盖忙碌态（进度条 / 全禁用 / 完成后自动重扫 / 撤销按钮变可用）。
+   - 需人工点一次：勾选"重启 Explorer"验证二次确认与关窗拦截链路（桌面会短暂消失，需用户同意）。
+6. 若动了写入逻辑，用 `reg query` 读回（`<ProgID>\DefaultIcon`、扩展名键、`UserChoice` 的 `ProgId`）确认值与预期格式一致；**执行撤销后同样读回**，验证恢复正确。
 
 ---
 
@@ -95,8 +106,8 @@ cd src-tauri && cargo clippy --all-targets
 | 现象 | 说明 |
 |---|---|
 | `productName`（`zed-file-assoc-gui`）≠ 目录名（`RsIcon-tauri`）≠ 包名（`rsicon-tauri`）≠ 窗口标题 | 统一要动 `tauri.conf.json:3`、`Cargo.toml`、`package.json`、README 四处，先问 |
+| 五个逻辑模块已与 egui 版分叉 | 不再是"逐字节复用"关系；§6 待决 2 已升级为「必须做」（抽 core crate） |
 | exe 图标是占位 | `app-icon.png` 是生成的占位图；换真图后 `pnpm tauri icon app-icon.png` 重生成 |
-| 旧仓库（`E:\1Qoder\RsIcon`）仍在 | 五个逻辑模块是逐字节复制关系：改一边要同步另一边，或择机定"单一来源"（DESIGN §6 待决 2） |
 | `lib.rs:16` `#![allow(dead_code)]` | 掩盖 `create_key`/`refresh_full` 等未接线项 |
 | `bundle.active=false` | 没有安装包产物；如需 NSIS/MSI 改 `tauri.conf.json:29` |
 
