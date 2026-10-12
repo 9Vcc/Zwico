@@ -195,58 +195,62 @@ export default function App() {
             </div>
           ) : null}
 
-          {/* 滚动由外层承担：多列容器必须高度自适应，否则内容超限会横向新增列 */}
+          {/* 滚动由外层承担；卡片用显式两列容器：宽屏并列、窄屏自动堆叠 */}
           <div className="content-scroll">
             <section className="content">
-              <IconSettingsCard
-                zedPath={store.zedPath}
-                mode={store.mode}
-                customDir={store.customDir}
-                icoCount={store.icoCount}
-                perExtensionCount={Object.keys(store.perExtension).length}
-                disabled={store.busy}
-                installations={store.installations}
-                scanning={store.scanning}
-                onPickZed={() => void store.pickZed()}
-                onScan={() => void store.scanZed()}
-                onUseInstallation={store.useInstallation}
-                onModeChange={store.setMode}
-                onCustomDirChange={store.setCustomDir}
-                onPickCustomDir={() => void store.pickCustomDir()}
-              />
+              <div className="content__col">
+                <IconSettingsCard
+                  zedPath={store.zedPath}
+                  mode={store.mode}
+                  customDir={store.customDir}
+                  icoCount={store.icoCount}
+                  perExtensionCount={Object.keys(store.perExtension).length}
+                  disabled={store.busy}
+                  installations={store.installations}
+                  scanning={store.scanning}
+                  onPickZed={() => void store.pickZed()}
+                  onScan={() => void store.scanZed()}
+                  onUseInstallation={store.useInstallation}
+                  onModeChange={store.setMode}
+                  onCustomDirChange={store.setCustomDir}
+                  onPickCustomDir={() => void store.pickCustomDir()}
+                />
+              </div>
 
-              <ActionsCard
-                selectedCount={store.stats.selected}
-                total={store.stats.total}
-                modeLabel={modeLabel}
-                busy={store.busy}
-                undoStatus={store.undoStatus}
-                onApplySelected={store.applySelected}
-                onApplyAll={store.applyAll}
-                onReset={() => store.setDialog("remove")}
-                onUndo={store.undo}
-                onOpenSvgIco={store.openSvgIco}
-              />
+              <div className="content__col">
+                <ActionsCard
+                  selectedCount={store.stats.selected}
+                  total={store.stats.total}
+                  modeLabel={modeLabel}
+                  busy={store.busy}
+                  undoStatus={store.undoStatus}
+                  onApplySelected={store.applySelected}
+                  onApplyAll={store.applyAll}
+                  onReset={() => store.setDialog("remove")}
+                  onUndo={store.undo}
+                  onOpenSvgIco={store.openSvgIco}
+                />
 
-              <MaintenanceCard
-                busy={store.busy}
-                clearCache={store.clearCache}
-                restartExplorer={store.restartExplorer}
-                invalidCount={store.stats.invalid}
-                onClearCache={store.setClearCache}
-                onRestartExplorer={store.setRestartExplorer}
-                onRefresh={store.requestRefresh}
-                onRepair={store.repairInvalid}
-              />
+                <MaintenanceCard
+                  busy={store.busy}
+                  clearCache={store.clearCache}
+                  restartExplorer={store.restartExplorer}
+                  invalidCount={store.stats.invalid}
+                  onClearCache={store.setClearCache}
+                  onRestartExplorer={store.setRestartExplorer}
+                  onRefresh={store.requestRefresh}
+                  onRepair={store.repairInvalid}
+                />
 
-              <PresetCard
-                busy={store.busy}
-                modeLabel={modeLabel}
-                perExtensionCount={Object.keys(store.perExtension).length}
-                customDir={store.customDir}
-                onExport={() => void store.exportPreset()}
-                onImport={() => void store.importPreset()}
-              />
+                <PresetCard
+                  busy={store.busy}
+                  modeLabel={modeLabel}
+                  perExtensionCount={Object.keys(store.perExtension).length}
+                  customDir={store.customDir}
+                  onExport={() => void store.exportPreset()}
+                  onImport={() => void store.importPreset()}
+                />
+              </div>
             </section>
           </div>
         </section>

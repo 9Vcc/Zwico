@@ -26,7 +26,7 @@ export function PresetCard({
         <Pill tone="info">{modeLabel}</Pill>
         {perExtensionCount > 0 ? <Pill tone="ok">{perExtensionCount} 项专属图标</Pill> : null}
         {customDir !== "" ? (
-          <Pill tone="muted" data-tip={customDir}>
+          <Pill tone="muted" title={customDir}>
             已设图标目录
           </Pill>
         ) : null}

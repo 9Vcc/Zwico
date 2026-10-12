@@ -278,12 +278,21 @@ body {
   padding: 12px;
 }
 
-/* 卡片区：多列瀑布流。容器高度保持 auto（内容撑开），列高由内容均分决定；
-   若把固定高度压在多列容器上，超出部分会横向新增列而不是纵向滚动。
-   卡片各自堆叠 —— 既不被同行较高的卡片拉伸，也不会在列中留出空洞。 */
+/* 卡片区：显式两列容器（不用 CSS 多列 —— 其列宽在窄容器下不可控，
+   实测窗口拉到最小时卡片会被压成一条线）。
+   宽屏左右并列，窄屏自动堆叠为单列，顺序即 DOM 顺序。 */
 .content {
-  columns: 300px;
-  column-gap: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.content__col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .resizer {
@@ -532,9 +541,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* 瀑布流内：整张卡片不可被拆到两列，用外边距充当列内间距 */
-  break-inside: avoid;
-  margin-bottom: 10px;
 }
 
 .card__head {
@@ -710,13 +716,20 @@ body {
 
 /* ===== 开关 ===== */
 
+/* 开关组：从属于上方的刷新按钮，用左侧竖线表达层级 */
 .switch-group {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--stroke);
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--stroke);
+}
+
+.switch-group__label {
+  margin-bottom: 2px;
+  font-size: 10.5px;
+  color: var(--text-weak);
 }
 
 .switch {
@@ -736,10 +749,10 @@ body {
 
 .switch__track {
   position: relative;
-  width: 34px;
-  height: 19px;
+  width: 32px;
+  height: 18px;
   border-radius: 999px;
-  background: var(--bg-hover);
+  background: var(--bg-input);
   border: 1px solid var(--stroke-strong);
   flex: 0 0 auto;
   transition: background 0.15s, border-color 0.15s;
@@ -749,21 +762,23 @@ body {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--text-weak);
   transition: transform 0.15s, background 0.15s;
 }
 
+/* 选中态刻意做「轻」：浅底 + 彩色滑块，
+   避免和卡片里的主按钮争夺视觉焦点（层级倒置） */
 .switch input:checked + .switch__track {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 .switch input:checked + .switch__track .switch__thumb {
-  transform: translateX(15px);
-  background: #fff;
+  transform: translateX(14px);
+  background: var(--accent);
 }
 
 .switch input:focus-visible + .switch__track {
@@ -1708,10 +1723,6 @@ body {
 /* ===== 窄窗口适配 ===== */
 
 @media (max-width: 1080px) {
-  .content {
-    columns: 280px;
-  }
-
   .content-scroll {
     padding: 10px;
   }
@@ -1731,7 +1742,13 @@ body {
   }
 
   .content {
-    columns: 1;
+    flex-direction: column;
+  }
+
+  /* 单列时列容器不再伸缩（否则 flex:1 会作用到高度上，压缩卡片） */
+  .content__col {
+    flex: 0 0 auto;
+    width: 100%;
   }
 
   .brand__sub {

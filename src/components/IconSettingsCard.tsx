@@ -158,7 +158,7 @@ export function IconSettingsCard({
               customDir.trim() === "" ? (
                 <Pill tone="muted">未设置目录，将回退系统图标</Pill>
               ) : (
-                <Pill tone="danger" data-tip="目录不存在或无法读取">
+                <Pill tone="danger" title="目录不存在或无法读取">
                   目录不可读
                 </Pill>
               )
@@ -168,7 +168,7 @@ export function IconSettingsCard({
               <Pill tone="warn">目录中没有 .ico 文件</Pill>
             )}
             {perExtensionCount > 0 ? (
-              <Pill tone="info" data-tip="这些扩展名使用单独指定的图标，不受上面的目录影响">
+              <Pill tone="info" title="这些扩展名使用单独指定的图标，不受上面的目录影响">
                 {perExtensionCount} 项专属图标
               </Pill>
             ) : null}

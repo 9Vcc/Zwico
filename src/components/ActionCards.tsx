@@ -166,27 +166,29 @@ export function MaintenanceCard({
 
       <button
         type="button"
-        className="btn btn--wide"
+        className="btn btn--primary btn--wide"
         disabled={busy}
-        data-tip="广播关联变更通知；按下方开关决定是否清缓存 / 重启 Explorer"
+        data-tip="广播关联变更通知；按下方「刷新选项」决定是否清缓存 / 重启 Explorer"
         onClick={onRefresh}
       >
         <IconRefresh size={14} />
         立即刷新资源管理器
       </button>
 
+      {/* 两个开关是上面刷新动作的选项，用左侧竖线明确从属层级 */}
       <div className="switch-group">
+        <span className="switch-group__label">刷新选项</span>
         <Switch
           checked={clearCache}
           onChange={onClearCache}
           label="清除图标缓存"
-          data-tip="删除 IconCache.db 与 thumbcache_*.db，强制 Explorer 重建图标缓存"
+          title="删除 IconCache.db 与 thumbcache_*.db，强制 Explorer 重建图标缓存"
         />
         <Switch
           checked={restartExplorer}
           onChange={onRestartExplorer}
           label="重启 Explorer"
-          data-tip="刷新最彻底，但桌面与任务栏会短暂消失（约 2–3 秒），执行前会二次确认"
+          title="刷新最彻底，但桌面与任务栏会短暂消失（约 2–3 秒），执行前会二次确认"
         />
       </div>
 
