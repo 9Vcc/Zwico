@@ -136,10 +136,12 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 | 文件 | 导出 | 说明 |
 |---|---|---|
 | `ui.tsx` | `Card` `Pill` `Spinner` `Switch` + 图标集 | 基础件与 SVG 图标（16×16、1.5px、currentColor），含窗口控制图标 |
-| `TitleBar.tsx` | `TitleBar` | 自绘标题栏：拖拽区（双击最大化）+ 通道 + 主题 + 最小化/最大化/关闭 |
-| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内图标按钮）、`EmptyState` |
-| `IconSettingsCard.tsx` | `IconSettingsCard` | Zed 路径（自动检测 + 扫描结果列表）、来源模式、图标目录、SVG 转 ICO 入口 |
-| `ActionCards.tsx` | `ActionsCard` `UndoCard` `MaintenanceCard` | 应用/恢复、撤销、刷新与修复 |
+| `TitleBar.tsx` | `TitleBar` | 自绘标题栏：拖拽区（双击最大化）+ 通道下拉 + 主题 + 最小化/最大化/关闭 |
+| `Tooltip.tsx` | `TooltipLayer` | 全局自绘提示层（`data-tip` / `data-tip-icon` / `data-tip-title`），fixed 定位不受容器裁剪 |
+| `Select.tsx` | `Select` | 自绘下拉（按钮 + 浮层列表；点击外部 / Esc 关闭，方向键与 Enter 可选） |
+| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内专属图标按钮）、`EmptyState` |
+| `IconSettingsCard.tsx` | `IconSettingsCard` | Zed 路径（自动检测 + 扫描结果列表）、来源模式、图标目录 |
+| `ActionCards.tsx` | `ActionsCard` `MaintenanceCard` | 操作（应用 / 恢复 / 撤销 / SVG 转 ICO 入口）、刷新与修复 |
 | `PresetCard.tsx` | `PresetCard` | 预设导出导入 + 当前配置摘要 |
 | `SvgToIcoDialog.tsx` | `SvgToIcoDialog` | SVG 预览 + 尺寸勾选 + 转换 + 保存 |
 | `LogPanel.tsx` | `LogPanel` | 分级日志、自动吸底、折叠、右键复制单条 |
