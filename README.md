@@ -1,14 +1,20 @@
 # Zwico
 
-**Zwico** = **Z**ed **Wi**ndows **Ico**n —— Zed 编辑器的 Windows 文件图标管理工具。
+**Zwico** = **Z**ed **Wi**ndows **Ico**n
 
-Tauri 2 + React 19 + TypeScript 实现。只修改当前用户（HKCU）注册表，**不需要管理员权限**。
+## 解决什么问题
+
+Zed 编辑器的 Windows 版本将自身设为默认文件打开程序时，相关文件类型在资源
+管理器中会显示同一个图标，难以分辨。Zwico 用于解决这个问题：将系统中的文件
+图标关联修改为自定义的图标，确保在 Windows 资源管理器中将 Zed 设为默认编辑器
+后，相关文件类型显示便于分辨的图标。
+
+Tauri 2 + React 19 + TypeScript 实现。只修改当前用户（HKCU）注册表，
+**不需要管理员权限**。
 
 ## 名称由来
 
-Zwico 取自 **Z**ed **Wi**ndows **Ico**n 的缩合：让 Zed 在 Windows 上的每个文件类型
-都有自己该有的图标。它做三件事——把 Zed 注册成各扩展名的处理器、给每个扩展名
-配独立图标、并把这些设置在系统里维护好。
+Zwico 取自 **Z**ed **Wi**ndows **Ico**n 的缩合（Zed + Windows + Icon）。
 
 ## 功能
 
