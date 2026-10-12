@@ -195,10 +195,6 @@ export function installDevMock(): boolean {
         classesRegistered: true,
       })),
     openDefaultAppsSettings: async () => undefined,
-    setDefaultExtensions: async () => [
-      { key: "back.defaultSet", params: ["3", "py (← Python.File); rs; go"], level: "info" },
-      { key: "back.notified", level: "info" },
-    ],
     scanZedInstallations: async () => [
       {
         path: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",

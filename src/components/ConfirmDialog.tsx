@@ -33,12 +33,6 @@ const DIALOG_TEXT: Record<
     confirm: "dialog.register.confirm",
     danger: true,
   },
-  setDefault: {
-    title: "dialog.setDefault.title",
-    message: "dialog.setDefault.message",
-    confirm: "dialog.setDefault.confirm",
-    danger: true,
-  },
   quit: {
     title: "dialog.quit.title",
     message: "dialog.quit.message",

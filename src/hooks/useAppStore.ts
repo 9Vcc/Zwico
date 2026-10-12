@@ -32,7 +32,7 @@ import { useSvgIco } from "./useSvgIco";
 import { useToasts } from "./useToast";
 
 export type Theme = "dark" | "light";
-export type DialogKind = "remove" | "refresh" | "quit" | "undo" | "register" | "setDefault";
+export type DialogKind = "remove" | "refresh" | "quit" | "undo" | "register";
 /** 主视图：主界面 / 设置页 */
 export type AppView = "main" | "settings";
 
@@ -373,32 +373,6 @@ export function useAppStore() {
       fail("fail.openSettings", err);
     }
   }, [fail]);
-
-  /** 把关注列表设为 Zed 默认打开方式（删除 UserChoice，不可逆，需先经确认对话框） */
-  const setDefaultWatched = useCallback(async () => {
-    const list = watched;
-    if (list.length === 0) {
-      push("warn", t("toast.noExtensions"));
-      return;
-    }
-    if (!zedPath) {
-      fail("fail.applyNoZed.title", new Error(t("fail.applyNoZed")));
-      return;
-    }
-    setBusy(true);
-    setProgress({ current: 0, total: list.length, extension: "" });
-    try {
-      appendLogs(await api.setDefaultExtensions(channel, list, zedPath));
-      succeed(t("watch.defaultDone", [list.length]));
-    } catch (err) {
-      fail("fail.setDefault", err);
-    } finally {
-      setBusy(false);
-      setProgress(null);
-      await load(channel);
-      await inspectWatched();
-    }
-  }, [appendLogs, channel, fail, inspectWatched, load, push, succeed, watched, zedPath]);
 
   /** 为关注列表中的扩展名建立 Zed 关联（改变打开方式，需先经确认对话框） */
   const registerWatched = useCallback(async () => {
@@ -766,9 +740,8 @@ export function useAppStore() {
     else if (kind === "refresh") void runRefresh();
     else if (kind === "undo") void runUndo();
     else if (kind === "register") void registerWatched();
-    else if (kind === "setDefault") void setDefaultWatched();
     else if (kind === "quit") void api.confirmQuit();
-  }, [dialog, registerWatched, removeSelected, runRefresh, runUndo, setDefaultWatched]);
+  }, [dialog, registerWatched, removeSelected, runRefresh, runUndo]);
 
   const copyLogs = useCallback(async () => {
     try {
@@ -861,7 +834,6 @@ export function useAppStore() {
     toggleWatched,
     clearWatched,
     registerWatched,
-    setDefaultWatched,
     openDefaultApps,
     setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,
