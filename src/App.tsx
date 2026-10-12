@@ -241,6 +241,8 @@ export default function App() {
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
           onLangChange={store.setLangPref}
+          autostart={store.autostart}
+          onToggleAutostart={() => void store.toggleAutostart()}
           onToggleLogCollapsed={store.toggleLogCollapsed}
           onResetSidebar={() => store.setSidebarWidth(288)}
           onResetLogHeight={() => store.setLogHeight(150)}
@@ -282,6 +284,7 @@ export default function App() {
           onClearIcon={store.clearIconFor}
           onRowMenu={openRowMenu}
           onToggleWatchedOnly={() => store.setWatchedOnly(!store.watchedOnly)}
+          onReload={() => void store.reload()}
         />
 
         <div

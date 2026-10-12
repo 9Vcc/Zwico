@@ -11,7 +11,7 @@
 //! - `apply_icons(targets, mode, zedPath, customDir)` / `remove_icons(targets)` → log[]
 //! - `refresh_explorer(clearCache, restartExplorer)` → log[]
 //! - `undo_status()` → { available, timestamp, action, count }；`undo_last()` → log[]
-//! - `scan_ico_count(dir)` / `confirm_quit()`
+//! - `scan_ico_count(dir)` / `set_autostart(enable)` / `is_autostart_enabled()`
 //!
 //! 设计约定（详见 DESIGN.md D6/D7/D8/D19）：
 //! - **busy 由 RAII 守卫持有**，任何返回路径（含 `?` 提前返回、panic 展开）都会复位
@@ -33,7 +33,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State,
+};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 use association::FileAssociation;
 use text::encoded;
@@ -808,7 +813,37 @@ fn window_toggle_maximize(window: tauri::Window) {
 /// 从而在任务进行中仍被关窗拦截逻辑挡住（D8）。
 #[tauri::command]
 fn window_close(window: tauri::Window) {
-    let _ = window.close();
+    // 关闭按钮 = 隐藏到托盘（与 CloseRequested 拦截保持一致），不退出进程
+    let _ = window.hide();
+}
+
+/// 显示并聚焦主窗口（托盘点击 / 菜单共用）
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// 设置开机自启动
+#[tauri::command]
+async fn set_autostart(app: AppHandle, enable: bool) -> Result<(), String> {
+    let autostart = app.autolaunch();
+    let result = if enable {
+        autostart.enable()
+    } else {
+        autostart.disable()
+    };
+    result.map_err(|err| encoded("back.autostartFailed", &[err.to_string()]))
+}
+
+/// 查询开机自启动是否已启用
+#[tauri::command]
+async fn is_autostart_enabled(app: AppHandle) -> Result<bool, String> {
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|err| encoded("back.autostartFailed", &[err.to_string()]))
 }
 
 /// 开始拖动窗口（自定义标题栏的拖拽区）
@@ -1073,13 +1108,6 @@ async fn inspect_application_registration() -> Result<AppRegistrationDto, String
     .await
 }
 
-/// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
-#[tauri::command]
-fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
-    state.busy.store(false, Ordering::SeqCst);
-    let _ = window.destroy();
-}
-
 /// 预设文件大小上限（1 MiB）：预设是纯文本配置，不该更大
 const PRESET_MAX_BYTES: u64 = 1024 * 1024;
 
@@ -1129,8 +1157,47 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(AppState {
             busy: Arc::new(AtomicBool::new(false)),
+        })
+        .setup(|app| {
+            // 系统托盘：关闭窗口后常驻后台。
+            // 左键点击托盘图标 = 显示主窗口；右键菜单 = 显示主窗口 / 退出。
+            // 菜单文案硬编码中文：托盘属系统级 UI，跟随前端语言需要跨层同步，暂缓。
+            let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            TrayIconBuilder::with_id("main-tray")
+                .icon(app.default_window_icon().expect("缺少应用图标").clone())
+                .tooltip("Zed 文件关联图标管理器")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => show_main_window(app),
+                    "quit" => {
+                        // 有任务进行中时不退出，拉回主窗口让用户看到进度
+                        let state = app.state::<AppState>();
+                        if state.busy.load(Ordering::SeqCst) {
+                            show_main_window(app);
+                        } else {
+                            app.exit(0);
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
@@ -1144,6 +1211,8 @@ pub fn run() {
             register_application,
             unregister_application,
             inspect_application_registration,
+            set_autostart,
+            is_autostart_enabled,
             inspect_extensions,
             open_default_apps_settings,
             refresh_explorer,
@@ -1158,16 +1227,15 @@ pub fn run() {
             window_close,
             start_window_drag,
             window_is_maximized,
-            confirm_quit
+            set_autostart,
+            is_autostart_enabled
         ])
         .on_window_event(|window, event| match event {
-            // 任务进行中拦截关闭，让前端弹确认框；确认后走 confirm_quit
+            // 关闭 = 隐藏到托盘（常驻后台，任务继续跑）；退出只能通过托盘菜单。
+            // Alt+F4 等系统级关闭同样被拦截。
             tauri::WindowEvent::CloseRequested { api, .. } => {
-                let state = window.app_handle().state::<AppState>();
-                if state.busy.load(Ordering::SeqCst) {
-                    api.prevent_close();
-                    let _ = window.emit("close-requested", ());
-                }
+                api.prevent_close();
+                let _ = window.hide();
             }
             // 自定义标题栏的按钮图标要跟随最大化状态变化
             tauri::WindowEvent::Resized(_) => {

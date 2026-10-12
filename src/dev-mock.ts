@@ -195,6 +195,8 @@ export function installDevMock(): boolean {
         classesRegistered: true,
       })),
     openDefaultAppsSettings: async () => undefined,
+    isAutostartEnabled: async () => false,
+    setAutostart: async () => undefined,
     inspectApplicationRegistration: async () => ({ registered: false, covered: 0 }),
     registerApplication: async () => [
       { key: "back.appRegistered", params: ["12"], level: "info" },
@@ -253,7 +255,6 @@ export function installDevMock(): boolean {
     saveIcoFile: async () => {
       throw new Error("浏览器预览模式不支持写入本地文件");
     },
-    confirmQuit: async () => undefined,
   });
 
   return true;

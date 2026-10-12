@@ -11,7 +11,6 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
   api,
-  onCloseRequested,
   onProgress,
   type Association,
   type ChannelKey,
@@ -132,6 +131,9 @@ export function useAppStore() {
   const [scanning, setScanning] = useState(false);
   /** 关注列表各扩展名的关联状态（设置页诊断） */
   const [extStatus, setExtStatus] = useState<Record<string, ExtStatus>>({});
+  /** 开机自启动（以系统实际状态为准） */
+  const [autostart, setAutostartEnabled] = useState(false);
+
   /** 应用注册状态（仅 zedg 通道使用） */
   const [appReg, setAppReg] = useState<AppRegistration>({ registered: false, covered: 0 });
   const previewRequested = useRef<Set<string>>(new Set());
@@ -267,7 +269,6 @@ export function useAppStore() {
   useEffect(() => {
     const unlisteners: (() => void)[] = [];
     void onProgress(setProgress).then((un) => unlisteners.push(un));
-    void onCloseRequested(() => setDialog("quit")).then((un) => unlisteners.push(un));
     return () => unlisteners.forEach((un) => un());
   }, []);
 
@@ -417,6 +418,25 @@ export function useAppStore() {
       await refreshAppReg();
     }
   }, [appendLogs, channel, fail, refreshAppReg, succeed]);
+
+  // 首次加载查询一次真实状态（自启动由系统管理，不存应用配置避免不同步）
+  useEffect(() => {
+    api
+      .isAutostartEnabled()
+      .then(setAutostartEnabled)
+      .catch(() => {});
+  }, []);
+
+  /** 切换开机自启动 */
+  const toggleAutostart = useCallback(async () => {
+    const next = !autostart;
+    try {
+      await api.setAutostart(next);
+      setAutostartEnabled(next);
+    } catch (err) {
+      fail("fail.autostart", err);
+    }
+  }, [autostart, fail]);
 
   /** 打开系统「默认应用」设置页（唯一能真正改变默认打开方式的途径） */
   const openDefaultApps = useCallback(async () => {
@@ -793,7 +813,6 @@ export function useAppStore() {
     else if (kind === "refresh") void runRefresh();
     else if (kind === "undo") void runUndo();
     else if (kind === "register") void registerWatched();
-    else if (kind === "quit") void api.confirmQuit();
   }, [dialog, registerWatched, removeSelected, runRefresh, runUndo]);
 
   const copyLogs = useCallback(async () => {
@@ -857,6 +876,7 @@ export function useAppStore() {
     watchedOnly,
     extStatus,
     appReg,
+    autostart,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -890,6 +910,7 @@ export function useAppStore() {
     registerWatched,
     registerApp,
     unregisterApp,
+    toggleAutostart,
     openDefaultApps,
     setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,

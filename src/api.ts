@@ -154,19 +154,16 @@ export const api = {
   windowMinimize: () => invoke<void>("window_minimize"),
   windowToggleMaximize: () => invoke<void>("window_toggle_maximize"),
   windowClose: () => invoke<void>("window_close"),
+  setAutostart: (enable: boolean) => invoke<void>("set_autostart", { enable }),
+  isAutostartEnabled: () => invoke<boolean>("is_autostart_enabled"),
   startWindowDrag: () => invoke<void>("start_window_drag"),
   windowIsMaximized: () => invoke<boolean>("window_is_maximized"),
-  confirmQuit: () => invoke<void>("confirm_quit"),
 };
 
 /** 订阅批量写入进度；返回取消订阅函数 */
 export const onProgress = (
   cb: (payload: ProgressPayload) => void,
 ): Promise<UnlistenFn> => listen<ProgressPayload>("progress", (event) => cb(event.payload));
-
-/** 订阅「任务进行中请求关闭窗口」事件 */
-export const onCloseRequested = (cb: () => void): Promise<UnlistenFn> =>
-  listen("close-requested", () => cb());
 
 /** 订阅窗口最大化状态变化（自定义标题栏的按钮图标跟随） */
 export const onWindowMaximized = (cb: (maximized: boolean) => void): Promise<UnlistenFn> =>

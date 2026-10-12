@@ -4,7 +4,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Association } from "../api";
 import { describeIcon, renderIconDescription } from "../lib/iconInfo";
 import { t } from "../lib/i18n";
-import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, IconStar, Spinner } from "./ui";
+import { IconCheck, IconClose, IconPlus, IconRefresh, IconSearch, IconShare, IconStar, Spinner } from "./ui";
 
 export function AssociationList({
   items,
@@ -27,6 +27,7 @@ export function AssociationList({
   onClearIcon,
   onRowMenu,
   onToggleWatchedOnly,
+  onReload,
 }: {
   items: Association[];
   total: number;
@@ -50,6 +51,7 @@ export function AssociationList({
   onClearIcon: (ext: string) => void;
   onRowMenu: (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => void;
   onToggleWatchedOnly: () => void;
+  onReload: () => void;
 }) {
   return (
     <aside className="sidebar">
@@ -137,6 +139,16 @@ export function AssociationList({
           </button>
           <button type="button" className="btn btn--mini" data-tip={t("list.clear.tip")} onClick={onClear}>
             {t("list.clear")}
+          </button>
+          <button
+            type="button"
+            className="btn btn--mini"
+            data-tip={t("list.reload.tip")}
+            disabled={busy}
+            onClick={onReload}
+          >
+            {busy ? <Spinner size={11} /> : <IconRefresh size={11} />}
+            {t("list.reload")}
           </button>
         </div>
         <span className="counter">{t("list.counter", [selected.size, total])}</span>

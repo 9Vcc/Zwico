@@ -65,6 +65,7 @@ export function SettingsPage({
   extStatus,
   appReg,
   channel,
+  autostart,
   viewport,
   onBack,
   onThemeChange,
@@ -85,6 +86,7 @@ export function SettingsPage({
   onRegisterWatched,
   onRegisterApp,
   onUnregisterApp,
+  onToggleAutostart,
   onOpenDefaultApps,
 }: {
   theme: "dark" | "light";
@@ -105,6 +107,8 @@ export function SettingsPage({
   appReg: AppRegistration;
   /** 当前通道（应用注册仅 zedg 通道提供） */
   channel: ChannelKey;
+  /** 开机自启动（系统实际状态） */
+  autostart: boolean;
   /** 关注项的关联状态（诊断"为什么注册了没生效"） */
   extStatus: Record<string, ExtStatus>;
   /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
@@ -128,6 +132,7 @@ export function SettingsPage({
   onRegisterWatched: () => void;
   onRegisterApp: () => void;
   onUnregisterApp: () => void;
+  onToggleAutostart: () => void;
   onOpenDefaultApps: () => void;
 }) {
   const [customInput, setCustomInput] = useState("");
@@ -200,6 +205,13 @@ export function SettingsPage({
                 </button>
               </div>
             </div>
+
+            <Switch
+              checked={autostart}
+              onChange={() => onToggleAutostart()}
+              label={t("settings.autostart")}
+              title={t("settings.autostart.tip")}
+            />
 
             <div className="settings__row">
               <span className="field__label">{t("settings.language")}</span>
