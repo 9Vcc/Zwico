@@ -33,13 +33,16 @@ RsIcon-tauri/
 │   │   └── presets.ts                预设格式、校验与序列化
 │   ├── components/
 │   │   ├── ui.tsx                    Card / Pill / Spinner / Switch + SVG 图标集
-│   │   ├── TitleBar.tsx              自绘标题栏（拖拽区 + 通道 + 主题 + 窗口按钮）
-│   │   ├── AssociationList.tsx       搜索 / 列表 / Row（含图标预览）/ EmptyState
-│   │   ├── IconSettingsCard.tsx      Zed 路径（自动检测）/ 来源模式 / 图标目录 / 图标工具
-│   │   ├── ActionCards.tsx           ActionsCard / UndoCard / MaintenanceCard
-│   │   ├── PresetCard.tsx            预设导出与导入
+│   │   ├── TitleBar.tsx              自绘标题栏（拖拽区 + 通道 + 主题 + 设置 + 窗口按钮）
+│   │   ├── Tooltip.tsx               全局自绘提示层（data-tip）
+│   │   ├── ContextMenu.tsx           统一右键菜单
+│   │   ├── Select.tsx                自绘下拉
+│   │   ├── AssociationList.tsx       搜索 / 列表 / Row（图标预览 + 右键菜单）/ EmptyState
+│   │   ├── SettingsPage.tsx          设置页（外观 / Zed 安装 / 刷新行为 / 配置 / 快捷键 / 关于）
+│   │   ├── IconSettingsCard.tsx      来源模式 / 自定义目录（Zed 路径只显示状态）
+│   │   ├── ActionCards.tsx           ActionsCard / MaintenanceCard
 │   │   ├── SvgToIcoDialog.tsx        SVG 转 ICO 对话框
-│   │   ├── LogPanel.tsx              日志（分级 / 吸底 / 折叠 / 右键复制）
+│   │   ├── LogPanel.tsx              日志（分级 / 吸底 / 折叠 / 行右键菜单）
 │   │   └── ConfirmDialog.tsx         确认框（Esc 取消 / Enter 确定）
 │   └── vite-env.d.ts
 ├── src-tauri/
@@ -135,16 +138,17 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 
 | 文件 | 导出 | 说明 |
 |---|---|---|
-| `ui.tsx` | `Card` `Pill` `Spinner` `Switch` + 图标集 | 基础件与 SVG 图标（16×16、1.5px、currentColor），含窗口控制图标 |
-| `TitleBar.tsx` | `TitleBar` | 自绘标题栏：拖拽区（双击最大化）+ 通道下拉 + 主题 + 最小化/最大化/关闭 |
+| `ui.tsx` | `Card` `Pill` `Spinner` `Switch` + 图标集 | 基础件与 SVG 图标（16×16、1.5px、currentColor），含窗口控制与设置齿轮图标 |
+| `TitleBar.tsx` | `TitleBar` | 自绘标题栏：拖拽区（双击最大化）+ 通道下拉 + 主题 + **设置** + 最小化/最大化/关闭 |
 | `Tooltip.tsx` | `TooltipLayer` | 全局自绘提示层（`data-tip` / `data-tip-icon` / `data-tip-title`），fixed 定位不受容器裁剪 |
+| `ContextMenu.tsx` | `ContextMenu` | 统一自绘右键菜单（分隔线 / 禁用项 / 夹在窗口内） |
 | `Select.tsx` | `Select` | 自绘下拉（按钮 + 浮层列表；点击外部 / Esc 关闭，方向键与 Enter 可选） |
-| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内专属图标按钮）、`EmptyState` |
-| `IconSettingsCard.tsx` | `IconSettingsCard` | Zed 路径（自动检测 + 扫描结果列表）、来源模式、图标目录 |
-| `ActionCards.tsx` | `ActionsCard` `MaintenanceCard` | 操作（应用 / 恢复 / 撤销 / SVG 转 ICO 入口）、刷新与修复 |
-| `PresetCard.tsx` | `PresetCard` | 预设导出导入 + 当前配置摘要 |
+| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内专属图标按钮 + 右键菜单）、`EmptyState` |
+| `SettingsPage.tsx` | `SettingsPage` | 设置页：外观与布局 / Zed 安装 / 刷新行为 / 配置与数据 / 快捷键 / 关于 |
+| `IconSettingsCard.tsx` | `IconSettingsCard` | 图标来源模式、自定义目录（Zed 路径只显示状态并跳转设置页） |
+| `ActionCards.tsx` | `ActionsCard` `MaintenanceCard` | 操作（应用 / 恢复 / 撤销 / SVG 转 ICO 入口）、刷新与修复（含附加动作摘要） |
 | `SvgToIcoDialog.tsx` | `SvgToIcoDialog` | SVG 预览 + 尺寸勾选 + 转换 + 保存 |
-| `LogPanel.tsx` | `LogPanel` | 分级日志、自动吸底、折叠、右键复制单条 |
+| `LogPanel.tsx` | `LogPanel` | 分级日志、自动吸底、折叠、行右键菜单 |
 | `ConfirmDialog.tsx` | `ConfirmDialog` | 四类确认文案（remove / refresh / undo / quit） |
 
 ### `src/api.ts`
