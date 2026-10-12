@@ -47,3 +47,5 @@ Desktop.ini
 !.workbuddy/skills/
 
 # 注：截图回归产物统一放在 target/ 下（已忽略），不要另建目录存放。
+
+icon/
