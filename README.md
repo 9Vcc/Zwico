@@ -66,13 +66,6 @@ GitHub Actions 驱动（`.github/workflows/release.yml`）：修改 `src-tauri/t
 的 `version` 并提交，然后 `git tag v<版本> && git push origin v<版本>` —— 自动构建
 NSIS 安装包并发布到 GitHub Release。直推 main 不触发构建。
 
-## 与 egui 版（仓库 ../RsIcon）的关系
-
-- 五个逻辑模块（`registry` / `zed` / `association` / `icon` / `refresh`）为纯 Rust，原样复用
-- 仅重写 UI 层：egui → Web 前端 + Tauri commands
-- 前后端协议见 `src-tauri/src/lib.rs` 头部注释；前端协议层在 `src/api.ts`
-- 原版保留在 `../RsIcon`（git 历史亦可回溯），本目录独立仓库
-
 ## 应用图标
 
 `app-icon.png` 为 1024×1024 源图，`pnpm tauri icon app-icon.png` 可重新生成 `src-tauri/icons/`。
