@@ -1,8 +1,14 @@
-// 图标设置卡片：Zed 路径、图标来源（模式）、自定义目录状态
+// 图标设置卡片：Zed 路径（含自动扫描）、图标来源、自定义目录、图标工具
 
-import { MODES, type IconMode } from "../api";
+import { useEffect, useState } from "react";
+import {
+  CHANNELS,
+  MODES,
+  type IconMode,
+  type ZedInstallation,
+} from "../api";
 import { baseName } from "../lib/iconInfo";
-import { Card, IconFolder, Pill } from "./ui";
+import { Card, IconFolder, IconSearch, IconShapes, Pill, Spinner } from "./ui";
 
 export function IconSettingsCard({
   zedPath,
@@ -11,10 +17,15 @@ export function IconSettingsCard({
   icoCount,
   perExtensionCount,
   disabled,
+  installations,
+  scanning,
   onPickZed,
+  onScan,
+  onUseInstallation,
   onModeChange,
   onCustomDirChange,
   onPickCustomDir,
+  onOpenSvgIco,
 }: {
   zedPath: string | null;
   mode: IconMode;
@@ -22,32 +33,80 @@ export function IconSettingsCard({
   icoCount: number | null;
   perExtensionCount: number;
   disabled: boolean;
+  installations: ZedInstallation[];
+  scanning: boolean;
   onPickZed: () => void;
+  onScan: () => void;
+  onUseInstallation: (path: string) => void;
   onModeChange: (mode: IconMode) => void;
   onCustomDirChange: (value: string) => void;
   onPickCustomDir: () => void;
+  onOpenSvgIco: () => void;
 }) {
+  const [showList, setShowList] = useState(false);
+
+  // 扫描出多个候选时自动展开列表，便于立刻挑选
+  useEffect(() => {
+    setShowList(installations.length > 1);
+  }, [installations]);
+
   return (
     <Card title="图标设置" hint="先选图标来源，再到「操作」中应用到左侧勾选的扩展名">
       <div className="field">
         <div className="field__head">
           <span className="field__label">Zed 可执行文件</span>
-          <button
-            type="button"
-            className="btn btn--mini"
-            title="手动指定 Zed / ZedG 可执行文件（适用于任何安装方式）"
-            onClick={onPickZed}
-          >
-            选择…
-          </button>
+          <div className="row-btns">
+            <button
+              type="button"
+              className="btn btn--mini"
+              disabled={disabled || scanning}
+              title="自动扫描本机所有 Zed 安装（卸载注册表 / 常见安装目录 / scoop / PATH），跨通道查找"
+              onClick={onScan}
+            >
+              {scanning ? <Spinner size={11} /> : <IconSearch size={11} />}
+              自动检测
+            </button>
+            <button
+              type="button"
+              className="btn btn--mini"
+              title="手动指定 Zed / ZedG 可执行文件（适用于任何安装方式）"
+              onClick={onPickZed}
+            >
+              选择…
+            </button>
+          </div>
         </div>
+
         <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
           <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
           <span className="path__text">{zedPath ? baseName(zedPath) : "未检测到 Zed"}</span>
           <span className="path__sub">
-            {zedPath ?? "「Zed 应用图标」模式不可用，可手动指定路径"}
+            {zedPath ?? "「Zed 应用图标」模式不可用，可自动检测或手动指定"}
           </span>
         </div>
+
+        {showList && installations.length > 0 ? (
+          <ul className="install-list" aria-label="扫描到的 Zed 安装">
+            {installations.map((item) => {
+              const label = CHANNELS.find((c) => c.key === item.channel)?.label ?? item.channel;
+              const active = zedPath === item.path;
+              return (
+                <li key={item.path}>
+                  <button
+                    type="button"
+                    className={`install-item${active ? " install-item--on" : ""}`}
+                    title={`${item.path}\n来源：${item.source}`}
+                    onClick={() => onUseInstallation(item.path)}
+                  >
+                    <span className="install-item__channel">{label}</span>
+                    <span className="install-item__path">{item.path}</span>
+                    <span className="install-item__source">{item.source}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </div>
 
       <div className="field">
@@ -118,6 +177,22 @@ export function IconSettingsCard({
           </div>
         </div>
       ) : null}
+
+      <div className="field field--sub">
+        <div className="field__head">
+          <span className="field__label">图标工具</span>
+          <button
+            type="button"
+            className="btn btn--mini"
+            disabled={disabled}
+            title="把 SVG 矢量图转换成多尺寸 .ico（16/24/32/48/64/128/256），可直接用于自定义图标"
+            onClick={onOpenSvgIco}
+          >
+            <IconShapes size={12} />
+            SVG 转 ICO
+          </button>
+        </div>
+      </div>
     </Card>
   );
 }

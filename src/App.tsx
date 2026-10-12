@@ -1,5 +1,5 @@
 // 应用外壳：把 store 的状态与动作分发给纯展示组件，
-// 并集中处理布局交互（侧栏拖拽）、快捷键与全局状态提示。
+// 并集中处理布局交互（侧栏/日志拖拽、边界夹紧）、快捷键与全局状态提示。
 
 import { useEffect, useRef } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
@@ -10,7 +10,8 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { IconSettingsCard } from "./components/IconSettingsCard";
 import { LogPanel } from "./components/LogPanel";
 import { PresetCard } from "./components/PresetCard";
-import { TopBar } from "./components/TopBar";
+import { SvgToIcoDialog } from "./components/SvgToIcoDialog";
+import { TitleBar } from "./components/TitleBar";
 import { IconAlert, IconWand } from "./components/ui";
 import { useAppStore } from "./hooks/useAppStore";
 import { ToastStack } from "./hooks/useToast";
@@ -20,11 +21,11 @@ export default function App() {
   const store = useAppStore();
   const modeLabel = MODES.find((m) => m.key === store.mode)?.label ?? store.mode;
 
-  // ---------- 快捷键 ----------
   // store 每轮渲染都是新对象，用 ref 持有以避免反复重绑监听
   const storeRef = useRef(store);
   storeRef.current = store;
 
+  // ---------- 快捷键 ----------
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const current = storeRef.current;
@@ -51,7 +52,7 @@ export default function App() {
         return;
       }
 
-      if (current.dialog !== null) return; // 对话框自己处理 Esc / Enter
+      if (current.dialog !== null || current.svgIco.open) return; // 对话框自己处理 Esc / Enter
       if (event.key === "Escape" && !typing) {
         current.clearSelection();
       } else if (event.key === "Enter" && !typing && current.stats.selected > 0) {
@@ -63,32 +64,66 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // ---------- 窗口尺寸变化：重新夹紧面板尺寸 ----------
+  // 无边框窗口由系统提供边缘缩放；缩小窗口后必须重新夹紧，
+  // 否则侧栏/日志会把内容区压到不可用（clamp 内部对未变化的值会跳过更新）
+  useEffect(() => {
+    const onResize = () => {
+      const current = storeRef.current;
+      current.setSidebarWidth(current.sidebarWidth);
+      current.setLogHeight(current.logHeight);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // ---------- 侧栏宽度拖拽 ----------
-  const dragging = useRef(false);
-  const onResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    dragging.current = true;
+  const sidebarDragging = useRef(false);
+  const onSidebarStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    sidebarDragging.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const onResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging.current) return;
+  const onSidebarMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!sidebarDragging.current) return;
     store.setSidebarWidth(event.clientX);
   };
-  const onResizeEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragging.current) return;
-    dragging.current = false;
+  const onSidebarEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!sidebarDragging.current) return;
+    sidebarDragging.current = false;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  // ---------- 日志高度拖拽（向上变大） ----------
+  const logDrag = useRef<{ startY: number; startHeight: number } | null>(null);
+  const onLogStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    logDrag.current = { startY: event.clientY, startHeight: store.logHeight };
+  };
+  const onLogMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = logDrag.current;
+    if (!drag) return;
+    store.setLogHeight(drag.startHeight - (event.clientY - drag.startY));
+  };
+  const onLogEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!logDrag.current) return;
+    logDrag.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   // ---------- 进度 ----------
   const progress = store.progress;
   const determinate = progress !== null && progress.total > 0;
-  const percent = determinate && progress ? Math.round((progress.current / progress.total) * 100) : 0;
+  const percent =
+    determinate && progress ? Math.round((progress.current / progress.total) * 100) : 0;
 
-  const style = { "--sidebar-w": `${store.sidebarWidth}px` } as CSSProperties;
+  const style = {
+    "--sidebar-w": `${store.sidebarWidth}px`,
+    "--log-h": `${store.logHeight}px`,
+  } as CSSProperties;
 
   return (
     <div className="app" style={style}>
-      <TopBar
+      <TitleBar
         channel={store.channel}
         busy={store.busy}
         theme={store.theme}
@@ -106,6 +141,7 @@ export default function App() {
           loaded={store.loaded}
           exeName={channelExeName(store.channel)}
           perExtension={store.perExtension}
+          previews={store.iconPreviews}
           onSearch={store.setSearch}
           onToggle={store.toggle}
           onSelectAll={store.selectAllVisible}
@@ -116,14 +152,14 @@ export default function App() {
         />
 
         <div
-          className="resizer"
+          className="resizer resizer--v"
           role="separator"
           aria-orientation="vertical"
           aria-label="拖动调整列表宽度"
           title="拖动调整列表宽度（双击恢复默认）"
-          onPointerDown={onResizeStart}
-          onPointerMove={onResizeMove}
-          onPointerUp={onResizeEnd}
+          onPointerDown={onSidebarStart}
+          onPointerMove={onSidebarMove}
+          onPointerUp={onSidebarEnd}
           onDoubleClick={() => store.setSidebarWidth(288)}
         />
 
@@ -165,10 +201,15 @@ export default function App() {
             icoCount={store.icoCount}
             perExtensionCount={Object.keys(store.perExtension).length}
             disabled={store.busy}
+            installations={store.installations}
+            scanning={store.scanning}
             onPickZed={() => void store.pickZed()}
+            onScan={() => void store.scanZed()}
+            onUseInstallation={store.useInstallation}
             onModeChange={store.setMode}
             onCustomDirChange={store.setCustomDir}
             onPickCustomDir={() => void store.pickCustomDir()}
+            onOpenSvgIco={store.openSvgIco}
           />
 
           <ActionsCard
@@ -205,6 +246,20 @@ export default function App() {
         </section>
       </div>
 
+      {store.logCollapsed ? null : (
+        <div
+          className="resizer resizer--h"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="拖动调整日志高度"
+          title="拖动调整日志高度（双击恢复默认）"
+          onPointerDown={onLogStart}
+          onPointerMove={onLogMove}
+          onPointerUp={onLogEnd}
+          onDoubleClick={() => store.setLogHeight(150)}
+        />
+      )}
+
       <LogPanel
         log={store.log}
         collapsed={store.logCollapsed}
@@ -217,6 +272,18 @@ export default function App() {
           kind={store.dialog}
           onConfirm={store.confirmDialog}
           onCancel={() => store.setDialog(null)}
+        />
+      ) : null}
+
+      {store.svgIco.open ? (
+        <SvgToIcoDialog
+          state={store.svgIco}
+          availableSizes={store.availableSizes}
+          onClose={store.closeSvgIco}
+          onPickSvg={() => void store.pickSvg()}
+          onToggleSize={store.toggleIcoSize}
+          onConvert={() => void store.convertSvg()}
+          onSave={() => void store.saveIco()}
         />
       ) : null}
 

@@ -173,6 +173,27 @@ export function installDevMock(): boolean {
       log: [{ text: "已重新加载 12 个文件关联", level: "info" }],
     }),
     scanIcoCount: async () => 4,
+    scanZedInstallations: async () => [
+      {
+        path: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",
+        channel: "zedg" as const,
+        source: "scoop shim",
+      },
+      {
+        path: "C:\\Users\\9Vcc\\AppData\\Local\\Programs\\Zed\\zed.exe",
+        channel: "stable" as const,
+        source: "常见安装目录",
+      },
+    ],
+    // 用彩色方块模拟真实图标预览（真实实现走 GDI 渲染 PNG）
+    previewIcon: async (value: string) => {
+      const palette = ["#4a86f7", "#3fae6e", "#d99a3c", "#e05a4f", "#7f77dd", "#4aa8c8"];
+      let hash = 0;
+      for (const ch of value) hash = (hash * 31 + ch.charCodeAt(0)) % 9973;
+      const color = palette[hash % palette.length];
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect x="1" y="1" width="14" height="14" rx="3" fill="${color}"/></svg>`;
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    },
     applyIcons: async () => [
       { text: "已应用 3 个扩展名", level: "info" },
       { text: "已通知系统刷新文件图标", level: "info" },
@@ -189,6 +210,18 @@ export function installDevMock(): boolean {
       count: 12,
     }),
     undoLast: async () => [{ text: "已撤销上次「应用图标」操作，恢复 12 项", level: "info" }],
+    // 窗口操作在浏览器里没有意义，直接忽略
+    windowMinimize: async () => undefined,
+    windowToggleMaximize: async () => undefined,
+    windowClose: async () => undefined,
+    startWindowDrag: async () => undefined,
+    windowIsMaximized: async () => false,
+    readSvgFile: async () => {
+      throw new Error("浏览器预览模式不支持读取本地文件");
+    },
+    saveIcoFile: async () => {
+      throw new Error("浏览器预览模式不支持写入本地文件");
+    },
     confirmQuit: async () => undefined,
   });
 

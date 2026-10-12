@@ -100,11 +100,23 @@ export interface UndoStatus {
   count: number;
 }
 
+/** 自动扫描到的 Zed 安装 */
+export interface ZedInstallation {
+  path: string;
+  channel: ChannelKey;
+  /** 来源说明：卸载注册表 / 常见安装目录 / scoop / PATH */
+  source: string;
+}
+
 export const api = {
   /** 启动引导：选通道 + 检测 Zed + 枚举关联，一次返回 */
   bootstrap: () => invoke<BootstrapState>("bootstrap"),
   loadState: (channel: ChannelKey) => invoke<LoadState>("load_state", { channel }),
   scanIcoCount: (dir: string) => invoke<number | null>("scan_ico_count", { dir }),
+  scanZedInstallations: () => invoke<ZedInstallation[]>("scan_zed_installations"),
+  /** 把 DefaultIcon 值渲染成 PNG data URL（失败为 null） */
+  previewIcon: (value: string, size = 16) =>
+    invoke<string | null>("preview_icon", { value, size }),
   applyIcons: (targets: Target[], mode: IconMode, zedPath: string, customDir: string | null) =>
     invoke<LogLine[]>("apply_icons", { targets, mode, zedPath, customDir }),
   removeIcons: (targets: Target[]) => invoke<LogLine[]>("remove_icons", { targets }),
@@ -115,6 +127,15 @@ export const api = {
   savePresetFile: (path: string, content: string) =>
     invoke<void>("save_preset_file", { path, content }),
   loadPresetFile: (path: string) => invoke<string>("load_preset_file", { path }),
+  readSvgFile: (path: string) => invoke<string>("read_svg_file", { path }),
+  saveIcoFile: (path: string, data: Uint8Array) =>
+    invoke<void>("save_ico_file", { path, data: Array.from(data) }),
+  // 自定义标题栏（无边框窗口）需要的窗口操作
+  windowMinimize: () => invoke<void>("window_minimize"),
+  windowToggleMaximize: () => invoke<void>("window_toggle_maximize"),
+  windowClose: () => invoke<void>("window_close"),
+  startWindowDrag: () => invoke<void>("start_window_drag"),
+  windowIsMaximized: () => invoke<boolean>("window_is_maximized"),
   confirmQuit: () => invoke<void>("confirm_quit"),
 };
 
@@ -126,3 +147,7 @@ export const onProgress = (
 /** 订阅「任务进行中请求关闭窗口」事件 */
 export const onCloseRequested = (cb: () => void): Promise<UnlistenFn> =>
   listen("close-requested", () => cb());
+
+/** 订阅窗口最大化状态变化（自定义标题栏的按钮图标跟随） */
+export const onWindowMaximized = (cb: (maximized: boolean) => void): Promise<UnlistenFn> =>
+  listen<boolean>("window-maximized", (event) => cb(event.payload));

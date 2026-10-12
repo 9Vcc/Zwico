@@ -13,6 +13,7 @@ export function AssociationList({
   loaded,
   exeName,
   perExtension,
+  previews,
   onSearch,
   onToggle,
   onSelectAll,
@@ -29,6 +30,8 @@ export function AssociationList({
   loaded: boolean;
   exeName: string;
   perExtension: Record<string, string>;
+  /** DefaultIcon 值 → PNG data URL（未加载为 undefined，渲染失败为 null） */
+  previews: Record<string, string | null>;
   onSearch: (value: string) => void;
   onToggle: (ext: string) => void;
   onSelectAll: () => void;
@@ -68,6 +71,7 @@ export function AssociationList({
               selected={selected.has(assoc.extension)}
               exeName={exeName}
               perIcon={perExtension[assoc.extension]}
+              preview={assoc.currentIcon ? previews[assoc.currentIcon] : null}
               onToggle={onToggle}
               onPickIcon={onPickIcon}
               onClearIcon={onClearIcon}
@@ -118,6 +122,7 @@ function Row({
   selected,
   exeName,
   perIcon,
+  preview,
   onToggle,
   onPickIcon,
   onClearIcon,
@@ -126,6 +131,8 @@ function Row({
   selected: boolean;
   exeName: string;
   perIcon?: string;
+  /** PNG data URL；undefined = 未加载，null = 渲染失败 */
+  preview?: string | null;
   onToggle: (ext: string) => void;
   onPickIcon: (ext: string) => void;
   onClearIcon: (ext: string) => void;
@@ -155,7 +162,18 @@ function Row({
       >
         <span className="row__check" aria-hidden>
           {selected ? <IconCheck size={11} /> : null}
-        </span>        <span className="row__ext">.{assoc.extension}</span>
+        </span>
+
+        {/* 图标预览：直接显示该项当前真实生效的图标 */}
+        <span className="row__icon" aria-hidden>
+          {preview ? (
+            <img src={preview} alt="" width={16} height={16} draggable={false} />
+          ) : (
+            <span className="row__icon-empty" />
+          )}
+        </span>
+
+        <span className="row__ext">.{assoc.extension}</span>
         <span className="row__tags">
           {assoc.iconState === "missing" ? (
             <span className="tag tag--danger" title={desc.detail}>

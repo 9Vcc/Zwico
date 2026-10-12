@@ -207,3 +207,40 @@ export const IconPalette = ({ size }: IconProps) => (
     <path d="M5.4 7.2V7.3 M8 6.2V6.3 M10.4 7.2V7.3" />
   </Svg>
 );
+
+// ---------- 窗口控制（自定义标题栏） ----------
+
+export const IconMinimize = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M3 8 H13" />
+  </Svg>
+);
+
+export const IconMaximize = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <rect x="3.5" y="3.5" width="9" height="9" rx="1" />
+  </Svg>
+);
+
+export const IconRestore = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <rect x="2.8" y="5.6" width="7.6" height="7.6" rx="1" />
+    <path d="M5.4 5.6 V4.2 A1.2 1.2 0 0 1 6.6 3 H11.6 A1.2 1.2 0 0 1 12.8 4.2 V9.2 A1.2 1.2 0 0 1 11.6 10.4 H10.4" />
+  </Svg>
+);
+
+/** 拖拽手柄（横向拖拽条用） */
+export const IconGrip = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M2.5 8 H13.5" />
+  </Svg>
+);
+
+/** 图形转换（SVG 转 ICO）用 */
+export const IconShapes = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M8 2.4 L11.2 8 H4.8 Z" />
+    <circle cx="5" cy="11" r="2.6" />
+    <rect x="8.6" y="8.4" width="5.4" height="5.4" rx="1.2" />
+  </Svg>
+);

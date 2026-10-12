@@ -23,9 +23,12 @@ import {
   type ProgressPayload,
   type Target,
   type UndoStatus,
+  type ZedInstallation,
 } from "../api";
 import { baseName, logToText } from "../lib/iconInfo";
+import { clampLogHeight, clampSidebarWidth } from "../lib/layout";
 import { buildPreset, parsePreset, presetFileName, presetToText } from "../lib/presets";
+import { useSvgIco } from "./useSvgIco";
 import { useToasts } from "./useToast";
 
 export type Theme = "dark" | "light";
@@ -42,6 +45,7 @@ interface PersistedConfig {
   /** 扩展名 → 逐项指定的 .ico 路径 */
   perExtension: Record<string, string>;
   sidebarWidth: number;
+  logHeight: number;
   logCollapsed: boolean;
 }
 
@@ -53,6 +57,7 @@ const DEFAULT_CONFIG: PersistedConfig = {
   restartExplorer: false,
   perExtension: {},
   sidebarWidth: 288,
+  logHeight: 150,
   logCollapsed: false,
 };
 
@@ -93,7 +98,14 @@ export function useAppStore() {
     action: null,
     count: 0,
   });
+  /** DefaultIcon 值 → PNG data URL（图标预览；null 表示渲染失败） */
+  const [iconPreviews, setIconPreviews] = useState<Record<string, string | null>>({});
+  /** 自动扫描到的 Zed 安装列表 */
+  const [installations, setInstallations] = useState<ZedInstallation[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const previewRequested = useRef<Set<string>>(new Set());
   const { toasts, push, dismiss } = useToasts();
+  const svgIcoTool = useSvgIco(push);
 
   const {
     theme,
@@ -103,6 +115,7 @@ export function useAppStore() {
     restartExplorer,
     perExtension,
     sidebarWidth,
+    logHeight,
     logCollapsed,
   } = config;
 
@@ -514,6 +527,74 @@ export function useAppStore() {
     };
   }, [mode, customDir]);
 
+  // 图标预览：把列表里出现的 DefaultIcon 值去重后逐个渲染
+  // （同一个值只请求一次，后端还有一层缓存，因此通常只发个位数请求）
+  useEffect(() => {
+    const pending: string[] = [];
+    for (const assoc of visible) {
+      const value = assoc.currentIcon;
+      if (!value || value in iconPreviews || previewRequested.current.has(value)) continue;
+      pending.push(value);
+    }
+    if (pending.length === 0) return;
+
+    pending.forEach((value) => previewRequested.current.add(value));
+    let cancelled = false;
+    void (async () => {
+      const updates: Record<string, string | null> = {};
+      for (const value of pending.slice(0, 80)) {
+        try {
+          updates[value] = await api.previewIcon(value, 16);
+        } catch {
+          updates[value] = null;
+        }
+      }
+      if (!cancelled) setIconPreviews((prev) => ({ ...prev, ...updates }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, iconPreviews]);
+
+  // ---------- Zed 安装扫描 ----------
+  const scanZed = useCallback(async () => {
+    setScanning(true);
+    try {
+      const list = await api.scanZedInstallations();
+      setInstallations(list);
+      if (list.length === 0) {
+        push("warn", "没有扫描到任何 Zed 安装，可用「选择…」手动指定可执行文件");
+      } else if (list.length === 1) {
+        const only = list[0];
+        setZedPath(only.path);
+        push("ok", `已自动选用扫描到的 Zed：${only.path}`, 6000);
+        setLog((prev) => [
+          ...prev,
+          { text: `自动检测并选用 Zed：${only.path}（来源：${only.source}）`, level: "info" },
+        ]);
+      } else {
+        push("info", `扫描到 ${list.length} 处 Zed 安装，请选择要使用的一个`, 6000);
+      }
+      return list;
+    } catch (err) {
+      fail("扫描 Zed 安装失败", err);
+      return [];
+    } finally {
+      setScanning(false);
+    }
+  }, [fail, push]);
+
+  /** 采用扫描结果中的某一项 */
+  const useInstallation = useCallback(
+    (path: string) => {
+      setZedPath(path);
+      push("ok", `已选用：${path}`, 5000);
+      setLog((prev) => [...prev, { text: `已选用 Zed：${path}`, level: "info" }]);
+    },
+    [push],
+  );
+
   // ---------- 对话框与日志 ----------
   const confirmDialog = useCallback(() => {
     const kind = dialog;
@@ -539,10 +620,17 @@ export function useAppStore() {
       : `正在处理 .${progress.extension}（${progress.current}/${progress.total}）`
     : "正在加载…";
 
-  const setSidebarWidth = useCallback(
-    (width: number) => patchConfig({ sidebarWidth: Math.round(width) }),
-    [patchConfig],
-  );
+  /** 侧栏宽度：经边界约束，保证内容区不会被压垮（值未变则不触发更新，避免窗口 resize 时的无谓重渲染） */
+  const setSidebarWidth = useCallback((width: number) => {
+    const clamped = clampSidebarWidth(width, window.innerWidth);
+    setConfig((prev) => (prev.sidebarWidth === clamped ? prev : { ...prev, sidebarWidth: clamped }));
+  }, []);
+
+  /** 日志面板高度：经边界约束，保证主区不会被压垮 */
+  const setLogHeight = useCallback((height: number) => {
+    const clamped = clampLogHeight(height, window.innerHeight);
+    setConfig((prev) => (prev.logHeight === clamped ? prev : { ...prev, logHeight: clamped }));
+  }, []);
 
   const toggleLogCollapsed = useCallback(
     () => patchConfig({ logCollapsed: !logCollapsed }),
@@ -574,12 +662,17 @@ export function useAppStore() {
     restartExplorer,
     perExtension,
     sidebarWidth,
+    logHeight,
     logCollapsed,
     toasts,
+    iconPreviews,
+    installations,
+    scanning,
     // 动作
     setSearch,
     setDialog,
     setSidebarWidth,
+    setLogHeight,
     toggleLogCollapsed,
     setClearCache: (value: boolean) => patchConfig({ clearCache: value }),
     setRestartExplorer: (value: boolean) => patchConfig({ restartExplorer: value }),
@@ -604,10 +697,14 @@ export function useAppStore() {
     pickCustomDir,
     pickIconFor,
     clearIconFor,
+    scanZed,
+    useInstallation,
     confirmDialog,
     copyLogs,
     clearLogs: () => setLog([]),
     dismissToast: dismiss,
+    // SVG → ICO 工具（状态与动作来自 useSvgIco）
+    ...svgIcoTool,
   };
 }
 
