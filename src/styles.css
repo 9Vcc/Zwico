@@ -262,16 +262,28 @@ body {
   min-height: 0;
 }
 
-.content {
+/* 内容区：进度条与提示条常驻上部，卡片区独立滚动 */
+.content-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 滚动容器：高度撑满剩余空间 —— 滚动必须发生在这里 */
+.content-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-  /* start：卡片高度贴合自身内容，不被同行最高卡片拉伸 */
-  align-items: start;
-  align-content: start;
-  min-height: 0;
+}
+
+/* 卡片区：多列瀑布流。容器高度保持 auto（内容撑开），列高由内容均分决定；
+   若把固定高度压在多列容器上，超出部分会横向新增列而不是纵向滚动。
+   卡片各自堆叠 —— 既不被同行较高的卡片拉伸，也不会在列中留出空洞。 */
+.content {
+  columns: 300px;
+  column-gap: 10px;
 }
 
 .resizer {
@@ -520,6 +532,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 瀑布流内：整张卡片不可被拆到两列，用外边距充当列内间距 */
+  break-inside: avoid;
+  margin-bottom: 10px;
 }
 
 .card__head {
@@ -1040,8 +1055,8 @@ body {
 /* ===== 进度与提示条 ===== */
 
 .progress {
-  grid-column: 1 / -1;
   position: relative;
+  margin: 12px 12px 0;
   height: 32px;
   display: flex;
   align-items: center;
@@ -1080,10 +1095,10 @@ body {
 }
 
 .banner {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 12px 12px 0;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
@@ -1694,8 +1709,11 @@ body {
 
 @media (max-width: 1080px) {
   .content {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    padding: 12px;
+    columns: 280px;
+  }
+
+  .content-scroll {
+    padding: 10px;
   }
 }
 
@@ -1713,7 +1731,7 @@ body {
   }
 
   .content {
-    grid-template-columns: minmax(0, 1fr);
+    columns: 1;
   }
 
   .brand__sub {
