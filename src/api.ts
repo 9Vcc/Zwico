@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** 与 package.json / Cargo.toml / tauri.conf.json 的版本保持一致 */
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.0.1";
 
 export type ChannelKey = "stable" | "preview" | "nightly" | "zedg";
 

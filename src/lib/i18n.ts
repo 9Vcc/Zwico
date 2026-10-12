@@ -26,7 +26,7 @@ const zh: Record<string, string> = {
   "dialog.icoFilterName": "Windows 图标",
 
   // ---- 应用与标题栏 ----
-  "app.title": "Zed 文件关联图标管理器",
+  "app.title": "Zwico",
   "app.subtitle": "v{0} · 仅修改当前用户配置",
   "titlebar.drag": "拖动可移动窗口，双击切换最大化",
   "titlebar.busy": "处理中",
@@ -487,7 +487,7 @@ const en: Record<string, string> = {
   "dialog.icoFilterName": "Windows icon",
 
   // ---- App & title bar ----
-  "app.title": "Zed File Association Icon Manager",
+  "app.title": "Zwico",
   "app.subtitle": "v{0} · Current user only",
   "titlebar.drag": "Drag to move the window, double-click to maximize",
   "titlebar.busy": "Working",

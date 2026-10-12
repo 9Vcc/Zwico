@@ -1224,7 +1224,7 @@ pub fn run() {
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
             TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().expect("缺少应用图标").clone())
-                .tooltip("Zed 文件关联图标管理器")
+                .tooltip("Zwico")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {

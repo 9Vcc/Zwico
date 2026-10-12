@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "zed-file-assoc-gui",
-  "version": "0.1.0",
+  "productName": "Zwico",
+  "mainBinaryName": "Zwico",
+  "version": "0.0.1",
   "identifier": "dev.qoder.rsicon",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -13,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zed 文件关联图标管理器",
+        "title": "Zwico",
         "width": 960,
         "height": 720,
         "minWidth": 780,
