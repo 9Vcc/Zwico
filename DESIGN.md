@@ -374,6 +374,18 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 - 关闭行为的两处入口（`CloseRequested` 事件与 `window_close` 命令）必须一致，改一处漏一处就会出现「点了 X 进程还在」的假象；
 - 前端的 `onCloseRequested` 监听与 Rust 的 `prevent_close` 会**同时收到**关闭请求，若 Rust 已决定隐藏，前端的确认框逻辑必须移除，否则弹窗与隐藏抢戏。
 
+### D40 · 默认图标目录、PNG 支持与启动自动应用
+
+**默认目录**：`default_icon_dir` 命令按「exe 同级 → 资源目录 → CWD → CWD 父目录」探测 `icon` 文件夹（dev 的 CWD 是 src-tauri，父目录即项目根）。**配置留空 = 跟随默认**（运行时传生效目录，不写回配置）—— 用户清空路径即恢复默认，语义无歧义。
+
+**PNG 支持**：Windows 的 `DefaultIcon` 只认 `.ico/.exe/.dll`，不认裸 PNG。目录里的 `<ext>.png` / `default.png` 会被 `png_to_ico` 包装（PNG **原样**嵌入 ICO 容器 —— Vista+ 支持 PNG 条目，不解码不缩放；尺寸取自 IHDR，1–256，超限拒绝）并缓存到 `app_data\generated-icons\`，关联指向缓存文件。
+
+**启动自动应用**：自定义模式下，应用启动 / 切模式 / 换目录时自动执行一次「应用到全部」（含系统通知刷新）。防死循环：`lastAutoApply` ref 记录 `(channel|目录)` 组合 —— load 完成后 associations 换新引用会让 `applyAll` 重建、effect 依赖它会被反复触发，key 拦截保证同一组合只应用一次。
+
+**边界**：自动应用只写 DefaultIcon（对系统里已存在的关联），不建 ProgID、不碰 UserChoice —— 关联注册（D35）仍只能显式触发。
+
+**实现坑**：`windows_registry` 的 `values()` 迭代器产出 `(String, Value)` **无 Result 包装**（与 `keys()` 一致），但 `open` 默认只读 —— 上一轮的教训在本轮直接复用（所有写走 `create`）。
+
 ---
 
 ## 5. 已知限制

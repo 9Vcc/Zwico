@@ -168,6 +168,19 @@
 
 ---
 
+## 0.12 第十二轮：默认图标目录、PNG 支持与启动自动应用（2026-10-12 晚）
+
+| 功能 | 实现 |
+|---|---|
+| 默认图标目录 | `default_icon_dir` 命令探测（exe 同级 → 资源目录 → CWD 及父目录）；配置留空 = 跟随默认（运行时传生效目录，不写回）；卡片新增「使用默认目录」按钮，placeholder 显示实际默认路径 |
+| PNG 支持 | `png_to_ico`（PNG 原样嵌入 ICO 容器，Vista+ PNG 条目）；`<ext>.png` / `default.png` 自动转换并缓存到 `generated-icons\`；`resolve_icon_value` 查找顺序变为 ico → png → default.ico → default.png → 系统 |
+| 启动自动应用 | 自定义模式下启动/切模式/换目录自动「应用到全部」（含系统通知）；`lastAutoApply` ref 按 (channel\|目录) 组合防死循环 |
+| 边界 | 只写 DefaultIcon，不建 ProgID、不碰 UserChoice（D35 不受影响） |
+
+**验证**：36 测试全绿（+3 png_to_ico）、clippy 0 告警、i18n 425 条中英一致且 333 引用全命中、`pnpm build` 通过。
+
+---
+
 ## 1. 结构评估
 
 ### 1.1 做得好的部分
