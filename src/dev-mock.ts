@@ -1,0 +1,196 @@
+// 浏览器预览用的最小 mock（仅 `pnpm dev` 直接开浏览器时生效）
+//
+// 目的：调整布局与样式时不必每次都构建桌面壳。main.tsx 只在 DEV 且
+// 检测不到 Tauri 运行时时动态引入本模块，生产构建不会包含这段代码。
+//
+// 这里返回**假数据**，不触碰任何真实注册表。
+
+import { api, type Association, type LogLine } from "./api";
+
+const now = Math.floor(Date.now() / 1000);
+
+const ASSOCIATIONS: Association[] = [
+  {
+    extension: "js",
+    progId: "ZedG.js",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: "imageres.dll,-102",
+    iconState: "valid",
+  },
+  {
+    extension: "ts",
+    progId: "ZedG.ts",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: "imageres.dll,-102",
+    iconState: "valid",
+  },
+  {
+    extension: "tsx",
+    progId: "ZedG.tsx",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: false,
+    currentIcon: null,
+    iconState: "none",
+  },
+  {
+    extension: "md",
+    progId: "Applications\\ZedG.exe",
+    sharedProgId: true,
+    sharedWith: ["json", "css"],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
+    iconState: "valid",
+  },
+  {
+    extension: "json",
+    progId: "Applications\\ZedG.exe",
+    sharedProgId: true,
+    sharedWith: ["md", "css"],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
+    iconState: "valid",
+  },
+  {
+    extension: "css",
+    progId: "Applications\\ZedG.exe",
+    sharedProgId: true,
+    sharedWith: ["md", "json"],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",0',
+    iconState: "valid",
+  },
+  {
+    extension: "py",
+    progId: "ZedG.py",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\icons\\py.ico",0',
+    iconState: "valid",
+  },
+  {
+    extension: "rs",
+    progId: "ZedG.rs",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\icons\\rs.ico",0',
+    iconState: "missing",
+  },
+  {
+    extension: "go",
+    progId: "ZedG.go",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: '"D:\\old-zed\\zed.exe",0',
+    iconState: "missing",
+  },
+  {
+    extension: "sh",
+    progId: "ZedG.sh",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: "imageres.dll,-74",
+    iconState: "valid",
+  },
+  {
+    extension: "toml",
+    progId: "ZedG.toml",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: false,
+    currentIcon: null,
+    iconState: "none",
+  },
+  {
+    extension: "yaml",
+    progId: "ZedG.yaml",
+    sharedProgId: false,
+    sharedWith: [],
+    hasDefaultIcon: true,
+    currentIcon: "imageres.dll,-102",
+    iconState: "valid",
+  },
+];
+
+const LOG: LogLine[] = [
+  { text: "已自动选择通道：汉化版（ZedG）", level: "info" },
+  { text: "已检测到 Zed：D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe", level: "info" },
+  { text: "已加载 12 个文件关联", level: "info" },
+  { text: "其中 2 个关联的图标文件已失效（源文件已不存在），可一键修复", level: "warn" },
+  { text: "已为 12 个扩展名设置图标", level: "info" },
+  { text: "3 个扩展名未找到自定义图标，已回退为系统图标（md、json、css）", level: "warn" },
+  { text: "2 项失败（sh：注册表操作失败；yaml：ProgID 键已不存在）", level: "error" },
+  { text: "已通知系统刷新文件图标", level: "info" },
+];
+
+/** 允许用 URL 参数覆盖界面形态，便于截图与演示：
+ *  ?theme=light|dark  ?log=collapsed  ?sidebar=360  */
+function applyViewParams() {
+  const params = new URLSearchParams(window.location.search);
+  const patch: Record<string, unknown> = {};
+  const theme = params.get("theme");
+  if (theme === "light" || theme === "dark") patch.theme = theme;
+  if (params.get("log") === "collapsed") patch.logCollapsed = true;
+  const sidebar = Number.parseInt(params.get("sidebar") ?? "", 10);
+  if (!Number.isNaN(sidebar)) patch.sidebarWidth = sidebar;
+  if (Object.keys(patch).length === 0) return;
+
+  try {
+    const raw = localStorage.getItem("rsicon-config-v1");
+    const config = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    localStorage.setItem("rsicon-config-v1", JSON.stringify({ ...config, ...patch }));
+  } catch {
+    localStorage.setItem("rsicon-config-v1", JSON.stringify(patch));
+  }
+}
+
+/** 安装 mock；返回是否真正接管（Tauri 环境下返回 false） */
+export function installDevMock(): boolean {
+  const globalWindow = window as unknown as { __TAURI_INTERNALS__?: unknown };
+  if (globalWindow.__TAURI_INTERNALS__) return false;
+
+  applyViewParams();
+
+  Object.assign(api, {
+    bootstrap: async () => ({
+      channel: "zedg" as const,
+      autoSelected: true,
+      zedPath: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",
+      associations: ASSOCIATIONS,
+      log: LOG,
+    }),
+    loadState: async () => ({
+      zedPath: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",
+      associations: ASSOCIATIONS,
+      log: [{ text: "已重新加载 12 个文件关联", level: "info" }],
+    }),
+    scanIcoCount: async () => 4,
+    applyIcons: async () => [
+      { text: "已应用 3 个扩展名", level: "info" },
+      { text: "已通知系统刷新文件图标", level: "info" },
+    ],
+    removeIcons: async () => [{ text: "已恢复默认图标 3 个扩展名", level: "info" }],
+    refreshExplorer: async () => [
+      { text: "已广播文件关联变更通知", level: "info" },
+      { text: "图标缓存清理完成", level: "info" },
+    ],
+    undoStatus: async () => ({
+      available: true,
+      timestamp: now - 120,
+      action: "apply",
+      count: 12,
+    }),
+    undoLast: async () => [{ text: "已撤销上次「应用图标」操作，恢复 12 项", level: "info" }],
+    confirmQuit: async () => undefined,
+  });
+
+  return true;
+}
