@@ -1,0 +1,63 @@
+name: Release
+
+# 打 tag 触发自动化发布：构建 NSIS 安装包并发布到 GitHub Release。
+# 版本号唯一来源是 src-tauri/tauri.conf.json 的 version —— 发布流程：
+#   1. 改 tauri.conf.json 的 version（如 0.0.2）
+#   2. 提交后打同名 tag：git tag v0.0.2 && git push origin v0.0.2
+# tauri-action 用 v__VERSION__ 占位符取该 version 创建 Release，
+# 因此 tag 与应用版本天然对齐（tag 打错版本时 Release 会落在错误 tag 上，
+# 属于应删 tag 重来的情况 —— 见下方 concurrency 说明）。
+on:
+  push:
+    tags:
+      - "v*"
+
+# 同一个 tag 只允许一条流水线在跑：tag 被删除重推时 GitHub 会为每次 ref
+# 变更各起一条 run，它们会并发抢建同一个 Release —— 直接取消旧的那条。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 构建并发布：自动创建 GitHub Release（tag = v<conf.version>），
+      # 上传 NSIS 安装包（Zwico_<version>_x64-setup.exe）等产物。
+      # 未配置 updater 签名密钥 —— 需要应用内自动更新时的扩展路径
+      # （TAURI_SIGNING_PRIVATE_KEY + tauri-plugin-updater）见 README/说明。
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Zwico v__VERSION__"
+          releaseBody: "See the assets below to download and install this version."
+          releaseDraft: false
+          prerelease: false
+          args: --verbose
