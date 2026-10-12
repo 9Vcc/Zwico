@@ -1,8 +1,70 @@
-# RsIcon（Tauri 版）
+# Zwico
 
-Zed 编辑器 Windows 文件关联图标管理工具 —— **Tauri 2 + React 19 + TypeScript** 版本。
+**Zwico** = **Z**ed **Wi**ndows **Ico**n —— Zed 编辑器的 Windows 文件图标管理工具。
 
-只修改当前用户（HKCU）注册表，**不需要管理员权限**。
+Tauri 2 + React 19 + TypeScript 实现。只修改当前用户（HKCU）注册表，**不需要管理员权限**。
+
+## 名称由来
+
+Zwico 取自 **Z**ed **Wi**ndows **Ico**n 的缩合：让 Zed 在 Windows 上的每个文件类型
+都有自己该有的图标。它做三件事——把 Zed 注册成各扩展名的处理器、给每个扩展名
+配独立图标、并把这些设置在系统里维护好。
+
+## 功能
+
+- **应用注册**：向系统声明 ZedG 能打开哪些扩展名（Capabilities + ProgID），
+  使其出现在系统「默认应用」与右键「打开方式」里；预置约 44 个常用扩展名，
+  也支持手动添加；可整体移除或按扩展名单独移除
+- **自定义图标**：指向一个图标目录，按 `<扩展名>.ico` / `<扩展名>.png` 匹配
+  （PNG 自动包装为 ICO，尺寸 1–256），`default.ico` 作为无专属图标时的兜底；
+  缺省目录为应用目录下的 `icon` 文件夹
+- **图标模式**：系统图标 / 应用图标（Zed exe 的图标）/ 自定义目录，一键批量应用
+- **关联状态诊断**：每个扩展名显示已生效 / 被系统默认程序覆盖 / 未关联 / 共享
+  （经「打开方式」关联的扩展名共享 ProgID，工具会把图标写到独立 ProgID 并引导迁移）
+- **启动行为**：开机自启动；启动时自动重新应用图标；启动时刷新系统图标缓存
+  （三者均默认关闭）
+- **系统托盘**：关闭窗口 = 隐藏到托盘常驻；托盘菜单「显示主窗口 / 退出」；
+  有任务进行中时退出会先拉回主窗口
+- **其他**：配置导入导出（JSON 预设）、日志面板（过滤 + 复制）、
+  图标缓存刷新 / 资源管理器重启
+
+## 安装
+
+从 [GitHub Releases](../../releases) 下载最新版 `Zwico_<版本>_x64-setup.exe`，双击安装。
+
+环境要求：Windows 10/11（WebView2 运行时随系统提供）。全程仅写 HKCU，无需管理员。
+
+## 使用说明
+
+1. 首次启动会自动检测 Zed 安装（卸载注册表 → 常见目录 → Scoop shim），
+   检测不到时在设置里手动指定，或用扫描列表从多个安装中选择；
+2. 「应用注册」→ 点 **完整注册**：把预置扩展名与手动添加的扩展名一并注册到
+   系统「默认应用」；
+3. 打开 **Windows 设置 → 默认应用 → ZedG**，把需要的扩展名设为默认 ——
+   每个扩展名的独立图标随即生效；
+4. 「图标来源」选 **自定义目录**，指向 `icon` 文件夹（留空即用默认目录）；
+5. 需要开机自动维护时，在「启动行为」里开启自启动与启动时自动应用 / 刷新缓存。
+
+> 「打开方式 → 始终使用此应用」会把多个扩展名共享到同一个 ProgID（图标跨类型
+> 共享）；要独立图标请通过系统「默认应用」设置，工具会自动完成迁移。
+
+## 从源码构建
+
+```bash
+pnpm install
+pnpm tdev             # 开发窗口（前端热重载）
+pnpm build            # 只构建 / 类型检查前端
+pnpm test             # 后端单元测试
+pnpm tbuild           # 打包 NSIS 安装包 + 独立 exe
+```
+
+环境要求：Node ≥ 20、pnpm、Rust ≥ 1.77.2、Windows 10/11（WebView2 运行时）。
+
+## 发布
+
+GitHub Actions 驱动（`.github/workflows/release.yml`）：修改 `src-tauri/tauri.conf.json`
+的 `version` 并提交，然后 `git tag v<版本> && git push origin v<版本>` —— 自动构建
+NSIS 安装包并发布到 GitHub Release。直推 main 不触发构建。
 
 ## 与 egui 版（仓库 ../RsIcon）的关系
 
@@ -10,17 +72,6 @@ Zed 编辑器 Windows 文件关联图标管理工具 —— **Tauri 2 + React 19
 - 仅重写 UI 层：egui → Web 前端 + Tauri commands
 - 前后端协议见 `src-tauri/src/lib.rs` 头部注释；前端协议层在 `src/api.ts`
 - 原版保留在 `../RsIcon`（git 历史亦可回溯），本目录独立仓库
-
-## 开发
-
-```bash
-pnpm install
-pnpm tauri dev        # 开发窗口（前端热重载）
-pnpm build            # 只构建/类型检查前端
-pnpm tauri build      # 打包 exe（bundle.active=false，仅出可执行文件）
-```
-
-环境要求：Node ≥ 20、pnpm、Rust ≥ 1.77.2、Windows 10/11（WebView2 运行时）。
 
 ## 应用图标
 
