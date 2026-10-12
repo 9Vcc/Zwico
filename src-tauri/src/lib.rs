@@ -204,6 +204,14 @@ struct ExtStatusDto {
     classes_registered: bool,
 }
 
+/// 应用注册状态（设置页用）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppRegistrationDto {
+    registered: bool,
+    covered: usize,
+}
+
 /// 自动扫描到的 Zed 安装（前端列表用）
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -998,6 +1006,73 @@ async fn open_default_apps_settings() -> Result<(), String> {
     .await
 }
 
+/// 完整注册 ZedG 为系统可见应用（仅 zedg 通道）
+///
+/// 只做候选注册：ProgID、OpenWithProgids、Applications、
+/// RegisteredApplications + Capabilities；不写 UserChoice、不改扩展名默认值。
+#[tauri::command]
+async fn register_application(
+    state: State<'_, AppState>,
+    channel: String,
+    extensions: Vec<String>,
+    zed_path: String,
+) -> Result<Vec<LogLineDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
+    let zed = PathBuf::from(zed_path.trim());
+    if zed_path.trim().is_empty() || !zed.is_file() {
+        return Err("back.appNeedsZed".to_string());
+    }
+    let _guard = BusyGuard::acquire(state.busy.clone());
+    blocking(move || {
+        let (covered, skipped) = register::register_application(channel, &extensions, &zed)
+            .map_err(|err| short_reason(&err))?;
+        let mut log = vec![info_p("back.appRegistered", vec![covered.to_string()])];
+        if !skipped.is_empty() {
+            let detail = skipped
+                .iter()
+                .map(|(ext, reason)| format!("{ext}: {reason}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            log.push(warn_p(
+                "back.appRegSkipped",
+                vec![skipped.len().to_string(), detail],
+            ));
+        }
+        Ok(log)
+    })
+    .await
+}
+
+/// 移除 ZedG 的应用注册（仅 zedg 通道）
+#[tauri::command]
+async fn unregister_application(
+    state: State<'_, AppState>,
+    channel: String,
+) -> Result<Vec<LogLineDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
+    let _guard = BusyGuard::acquire(state.busy.clone());
+    blocking(move || {
+        register::unregister_application(channel).map_err(|err| short_reason(&err))?;
+        Ok(vec![info("back.appUnregistered")])
+    })
+    .await
+}
+
+/// 查询应用注册状态（只读）
+#[tauri::command]
+async fn inspect_application_registration() -> Result<AppRegistrationDto, String> {
+    blocking(move || {
+        let status = register::application_registration_status().map_err(|err| short_reason(&err))?;
+        Ok(AppRegistrationDto {
+            registered: status.registered,
+            covered: status.covered,
+        })
+    })
+    .await
+}
+
 /// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
 #[tauri::command]
 fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
@@ -1066,6 +1141,9 @@ pub fn run() {
             apply_icons,
             remove_icons,
             register_extensions,
+            register_application,
+            unregister_application,
+            inspect_application_registration,
             inspect_extensions,
             open_default_apps_settings,
             refresh_explorer,

@@ -235,6 +235,8 @@ export default function App() {
           customDir={store.customDir}
           watched={store.watched}
           extStatus={store.extStatus}
+          appReg={store.appReg}
+          channel={store.channel}
           viewport={viewport}
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
@@ -253,6 +255,8 @@ export default function App() {
           onAddWatched={store.addWatched}
           onClearWatched={store.clearWatched}
           onRegisterWatched={() => store.setDialog("register")}
+          onRegisterApp={() => void store.registerApp()}
+          onUnregisterApp={() => void store.unregisterApp()}
           onOpenDefaultApps={() => void store.openDefaultApps()}
         />
       ) : (

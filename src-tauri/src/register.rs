@@ -116,6 +116,155 @@ pub fn register_extension(
     })
 }
 
+// ---------- 应用注册（仅 zedg 通道）----------
+//
+// 让 ZedG 出现在系统「默认应用」列表与右键「打开方式」中。
+// **仅对汉化版（zedg）通道开放** —— 官方安装器自带此注册，Scoop 安装没有。
+// 只做候选注册：ProgID、OpenWithProgids、Applications、RegisteredApplications
+// + Capabilities；不写 UserChoice、不改 `Classes\<ext>` 默认值 ——
+// 不改变任何扩展名的打开方式（DESIGN D35 边界）。
+
+/// RegisteredApplications 里的应用名
+pub const APP_NAME: &str = "ZedG";
+/// Capabilities 键（HKCU 根相对路径）
+pub const APP_CAPABILITIES: &str = r"Software\ZedG\Capabilities";
+/// 通用应用键（Classes 相对路径）：让 exe 出现在任意文件的「打开方式」列表
+pub const APP_APPLICATIONS: &str = r"Applications\ZedG.exe";
+
+/// 应用注册状态
+#[derive(Debug, Clone)]
+pub struct AppRegistration {
+    /// RegisteredApplications 里是否有指向本应用 Capabilities 的条目
+    pub registered: bool,
+    /// Capabilities\FileAssociations 声明的扩展名数
+    pub covered: usize,
+}
+
+/// 查询应用注册状态（只读）
+pub fn application_registration_status() -> Result<AppRegistration> {
+    let registered = registry::get_named_value(r"Software\RegisteredApplications", APP_NAME)?
+        .is_some_and(|value| value.eq_ignore_ascii_case(APP_CAPABILITIES));
+    let covered = if registered {
+        registry
+            ::value_names(&format!(r"{APP_CAPABILITIES}\FileAssociations"))?
+            .iter()
+            .filter(|name| name.starts_with('.'))
+            .count()
+    } else {
+        0
+    };
+    Ok(AppRegistration { registered, covered })
+}
+
+/// 完整注册：ProgID + OpenWithProgids + Applications + RegisteredApplications/Capabilities
+///
+/// 返回（覆盖数，跳过明细）。
+pub fn register_application(
+    channel: Channel,
+    extensions: &[String],
+    zed_exe: &Path,
+) -> Result<(usize, Vec<(String, String)>)> {
+    if channel != Channel::Zedg {
+        return Err(anyhow::anyhow!(
+            "{}",
+            encoded_str("back.appRegOnlyZedg", &[])
+        ));
+    }
+
+    let command = format!("\"{}\" \"%1\"", zed_exe.display());
+    let icon = format!("{},0", zed_exe.display());
+
+    // 1. RegisteredApplications：系统「默认应用」列表的数据源
+    registry::set_named_value(r"Software\RegisteredApplications", APP_NAME, APP_CAPABILITIES)?;
+
+    // 2. Capabilities：应用名与支持的扩展名清单
+    registry::set_named_value(APP_CAPABILITIES, "ApplicationName", APP_NAME)?;
+    registry::set_named_value(APP_CAPABILITIES, "ApplicationDescription", "Zed Editor (ZedG)")?;
+
+    let mut covered = 0usize;
+    let mut skipped: Vec<(String, String)> = Vec::new();
+    for extension in extensions {
+        let ext = normalize_extension(extension);
+        if !is_valid_extension(&ext) {
+            skipped.push((extension.to_string(), "invalid".into()));
+            continue;
+        }
+        let prog_id = prog_id_for(channel, &ext);
+
+        // 2a. Capabilities\FileAssociations
+        registry::set_named_value(
+            &format!(r"{APP_CAPABILITIES}\FileAssociations"),
+            &format!(".{ext}"),
+            &prog_id,
+        )?;
+
+        // 2b. ProgID（图标与打开命令）
+        registry::set_default_value(&prog_id, &prog_id)?;
+        registry::set_default_value(&format!("{prog_id}\\DefaultIcon"), &icon)?;
+        registry::set_default_value(&format!("{prog_id}\\shell\\open\\command"), &command)?;
+
+        // 2c. 挂到扩展名的候选列表（保留其他程序的既有条目）
+        registry::set_named_value(
+            &format!(r"Software\Classes\.{ext}\OpenWithProgids"),
+            &prog_id,
+            "",
+        )?;
+
+        covered += 1;
+    }
+
+    // 3. 通用应用键：任意文件的「打开方式」里都能选 ZedG
+    registry::set_default_value(&format!("{APP_APPLICATIONS}\\DefaultIcon"), &icon)?;
+    registry::set_default_value(&format!("{APP_APPLICATIONS}\\shell\\open\\command"), &command)?;
+
+    println!("[应用注册] ZedG 已完整注册，覆盖 {covered} 个扩展名");
+    Ok((covered, skipped))
+}
+
+/// 移除应用注册：清除本应用写入的全部候选条目，不影响其他程序
+pub fn unregister_application(channel: Channel) -> Result<()> {
+    if channel != Channel::Zedg {
+        return Err(anyhow::anyhow!(
+            "{}",
+            encoded_str("back.appRegOnlyZedg", &[])
+        ));
+    }
+
+    // 1. RegisteredApplications 条目
+    registry::remove_named_value(r"Software\RegisteredApplications", APP_NAME)?;
+
+    // 2. Capabilities 整键
+    registry::delete_key_tree(APP_CAPABILITIES)?;
+
+    // 3. 通用应用键
+    registry::delete_key(APP_APPLICATIONS)?;
+
+    // 4. 本应用创建的全部 ProgID 键（ZedG.*）
+    for name in registry::list_subkeys("")? {
+        if name.len() > APP_NAME.len() && name[..APP_NAME.len()].eq_ignore_ascii_case(APP_NAME) {
+            registry::delete_key(&name)?;
+        }
+    }
+
+    // 5. 各扩展名候选列表里挂的 ZedG 条目
+    for key in registry::list_subkeys("")? {
+        if !key.starts_with('.') {
+            continue;
+        }
+        let open_with = format!(r"Software\Classes\{key}\OpenWithProgids");
+        for name in registry::value_names(&open_with)? {
+            if name.len() > APP_NAME.len()
+                && name[..APP_NAME.len()].eq_ignore_ascii_case(APP_NAME)
+            {
+                registry::remove_named_value(&open_with, &name)?;
+            }
+        }
+    }
+
+    println!("[应用注册] ZedG 的应用注册已移除");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

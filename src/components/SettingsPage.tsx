@@ -5,14 +5,16 @@
 
 import { useState } from "react";
 
-import { APP_VERSION, CHANNELS, type ExtStatus, type ZedInstallation } from "../api";
+import { APP_VERSION, CHANNELS, type AppRegistration, type ExtStatus, type ZedInstallation } from "../api";
 import { baseName } from "../lib/iconInfo";
 import { t, type LangPref } from "../lib/i18n";
+import type { ChannelKey } from "../api";
 import { Select } from "./Select";
 import {
   Card,
   IconAlert,
   IconBack,
+  IconStar,
   IconDownload,
   IconCheck,
   IconFolder,
@@ -61,6 +63,8 @@ export function SettingsPage({
   customDir,
   watched,
   extStatus,
+  appReg,
+  channel,
   viewport,
   onBack,
   onThemeChange,
@@ -79,6 +83,8 @@ export function SettingsPage({
   onAddWatched,
   onClearWatched,
   onRegisterWatched,
+  onRegisterApp,
+  onUnregisterApp,
   onOpenDefaultApps,
 }: {
   theme: "dark" | "light";
@@ -95,6 +101,10 @@ export function SettingsPage({
   customDir: string;
   /** 关注列表：常用扩展名 */
   watched: string[];
+  /** 应用注册状态（仅 zedg 通道使用） */
+  appReg: AppRegistration;
+  /** 当前通道（应用注册仅 zedg 通道提供） */
+  channel: ChannelKey;
   /** 关注项的关联状态（诊断"为什么注册了没生效"） */
   extStatus: Record<string, ExtStatus>;
   /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
@@ -116,6 +126,8 @@ export function SettingsPage({
   onAddWatched: (exts: string[]) => void;
   onClearWatched: () => void;
   onRegisterWatched: () => void;
+  onRegisterApp: () => void;
+  onUnregisterApp: () => void;
   onOpenDefaultApps: () => void;
 }) {
   const [customInput, setCustomInput] = useState("");
@@ -437,6 +449,43 @@ export function SettingsPage({
               {t("watch.register.warn")}
             </p>
           </Card>
+
+          {/* 应用注册：仅汉化版通道提供（官方安装器自带，Scoop 版没有） */}
+          {channel === "zedg" ? (
+            <Card title={t("settings.appReg")} hint={t("settings.appReg.hint")}>
+              <div className="settings__row">
+                <Pill tone={appReg.registered ? "ok" : "muted"}>
+                  {appReg.registered
+                    ? t("appReg.registered", [appReg.covered])
+                    : t("appReg.notRegistered")}
+                </Pill>
+              </div>
+
+              <div className="btn-row">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={watched.length === 0}
+                  data-tip={t("appReg.register.tip")}
+                  onClick={onRegisterApp}
+                >
+                  <IconStar size={13} />
+                  {t("appReg.register", [watched.length])}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!appReg.registered}
+                  data-tip={t("appReg.unregister.tip")}
+                  onClick={onUnregisterApp}
+                >
+                  {t("appReg.unregister")}
+                </button>
+              </div>
+
+              <p className="card__note">{t("appReg.coverage", [watched.length])}</p>
+            </Card>
+          ) : null}
         </div>
 
         <div className="settings__col">

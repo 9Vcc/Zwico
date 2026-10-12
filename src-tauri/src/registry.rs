@@ -119,3 +119,62 @@ pub fn list_subkeys(path: &str) -> Result<Vec<String>> {
     let iter = key.keys().map_err(|err| reg_error(path, err))?;
     Ok(iter.collect())
 }
+
+// ---------- 通用命名值操作（HKCU 根相对路径） ----------
+//
+// 下面这些函数的 `path` 参数是 **相对 HKCU 根** 的路径（如
+// `Software\RegisteredApplications`），不拼接 `Software\Classes` 前缀 ——
+// 用于「应用注册」（Capabilities / RegisteredApplications）等非 Classes 场景。
+// 路径拼接本身仍只发生在本模块内。
+
+/// 写入命名值（REG_SZ）
+pub fn set_named_value(path: &str, name: &str, value: &str) -> Result<()> {
+    let key = CURRENT_USER.create(path).map_err(|err| reg_error(path, err))?;
+    key.set_string(name, value)
+        .map_err(|err| reg_error(path, err))
+}
+
+/// 读取命名值（REG_SZ；键或值不存在时返回 None）
+pub fn get_named_value(path: &str, name: &str) -> Result<Option<String>> {
+    let key = match CURRENT_USER.open(path) {
+        Ok(key) => key,
+        Err(err) if is_not_found(&err) => return Ok(None),
+        Err(err) => return Err(reg_error(path, err)),
+    };
+    match key.get_string(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if is_not_found(&err) => Ok(None),
+        Err(err) => Err(reg_error(path, err)),
+    }
+}
+
+/// 删除命名值（幂等：值不存在时同样成功）
+pub fn remove_named_value(path: &str, name: &str) -> Result<()> {
+    let key = match CURRENT_USER.open(path) {
+        Ok(key) => key,
+        Err(err) if is_not_found(&err) => return Ok(()),
+        Err(err) => return Err(reg_error(path, err)),
+    };
+    match key.remove_value(name) {
+        Ok(()) => Ok(()),
+        Err(err) if is_not_found(&err) => Ok(()),
+        Err(err) => Err(reg_error(path, err)),
+    }
+}
+
+/// 枚举指定键下的全部值名
+pub fn value_names(path: &str) -> Result<Vec<String>> {
+    let key = CURRENT_USER.open(path).map_err(|err| reg_error(path, err))?;
+    let iter = key.values().map_err(|err| reg_error(path, err))?;
+    Ok(iter.map(|(name, _)| name).collect())
+}
+
+/// 删除 HKCU 根相对路径的键树（幂等）。仅供 `Software\ZedG`（Capabilities）这类
+/// 不在 `Software\Classes` 下的键使用
+pub fn delete_key_tree(path: &str) -> Result<()> {
+    match CURRENT_USER.remove_tree(path) {
+        Ok(()) => Ok(()),
+        Err(err) if is_not_found(&err) => Ok(()),
+        Err(err) => Err(reg_error(path, err)),
+    }
+}

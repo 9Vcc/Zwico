@@ -20,6 +20,7 @@ import {
   type LogLine,
   type ProgressPayload,
   type Target,
+  type AppRegistration,
   type ExtStatus,
   type UndoStatus,
   type ZedInstallation,
@@ -131,6 +132,8 @@ export function useAppStore() {
   const [scanning, setScanning] = useState(false);
   /** 关注列表各扩展名的关联状态（设置页诊断） */
   const [extStatus, setExtStatus] = useState<Record<string, ExtStatus>>({});
+  /** 应用注册状态（仅 zedg 通道使用） */
+  const [appReg, setAppReg] = useState<AppRegistration>({ registered: false, covered: 0 });
   const previewRequested = useRef<Set<string>>(new Set());
   const { toasts, push, dismiss } = useToasts();
   const svgIcoTool = useSvgIco(push);
@@ -364,6 +367,56 @@ export function useAppStore() {
   useEffect(() => {
     void inspectWatched();
   }, [inspectWatched]);
+
+  /** 查询应用注册状态 */
+  const refreshAppReg = useCallback(async () => {
+    try {
+      setAppReg(await api.inspectApplicationRegistration());
+    } catch {
+      // 查询失败不影响主流程
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshAppReg();
+  }, [refreshAppReg]);
+
+  /** 完整注册 ZedG（覆盖关注列表中的扩展名；不改变默认打开方式） */
+  const registerApp = useCallback(async () => {
+    const list = watched;
+    if (list.length === 0) {
+      push("warn", t("appReg.empty"));
+      return;
+    }
+    if (!zedPath) {
+      fail("fail.applyNoZed.title", new Error(t("fail.applyNoZed")));
+      return;
+    }
+    setBusy(true);
+    try {
+      appendLogs(await api.registerApplication(channel, list, zedPath));
+      succeed(t("toast.appRegistered"));
+    } catch (err) {
+      fail("fail.registerApp", err);
+    } finally {
+      setBusy(false);
+      await refreshAppReg();
+    }
+  }, [appendLogs, channel, fail, push, refreshAppReg, succeed, watched, zedPath]);
+
+  /** 移除 ZedG 的应用注册 */
+  const unregisterApp = useCallback(async () => {
+    setBusy(true);
+    try {
+      appendLogs(await api.unregisterApplication(channel));
+      succeed(t("toast.appRemoved"));
+    } catch (err) {
+      fail("fail.unregisterApp", err);
+    } finally {
+      setBusy(false);
+      await refreshAppReg();
+    }
+  }, [appendLogs, channel, fail, refreshAppReg, succeed]);
 
   /** 打开系统「默认应用」设置页（唯一能真正改变默认打开方式的途径） */
   const openDefaultApps = useCallback(async () => {
@@ -803,6 +856,7 @@ export function useAppStore() {
     watched,
     watchedOnly,
     extStatus,
+    appReg,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -834,6 +888,8 @@ export function useAppStore() {
     toggleWatched,
     clearWatched,
     registerWatched,
+    registerApp,
+    unregisterApp,
     openDefaultApps,
     setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,

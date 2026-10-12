@@ -195,6 +195,13 @@ export function installDevMock(): boolean {
         classesRegistered: true,
       })),
     openDefaultAppsSettings: async () => undefined,
+    inspectApplicationRegistration: async () => ({ registered: false, covered: 0 }),
+    registerApplication: async () => [
+      { key: "back.appRegistered", params: ["12"], level: "info" },
+    ],
+    unregisterApplication: async () => [
+      { key: "back.appUnregistered", level: "info" },
+    ],
     scanZedInstallations: async () => [
       {
         path: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",

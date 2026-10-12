@@ -84,6 +84,13 @@ export interface UndoStatus {
   count: number;
 }
 
+/** 应用注册状态（ZedG 是否已在系统「默认应用」中可见） */
+export interface AppRegistration {
+  registered: boolean;
+  /** Capabilities\FileAssociations 声明的扩展名数 */
+  covered: number;
+}
+
 /** 单个扩展名的关联状态（设置页诊断用） */
 export interface ExtStatus {
   extension: string;
@@ -119,6 +126,15 @@ export const api = {
   /** 为扩展名建立 Zed 关联（改变打开方式，需用户显式触发） */
   registerExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
     invoke<LogLine[]>("register_extensions", { channel, extensions, zedPath }),
+  /** 完整注册 ZedG 为系统可见应用（仅 zedg 通道；不改变默认打开方式） */
+  registerApplication: (channel: ChannelKey, extensions: string[], zedPath: string) =>
+    invoke<LogLine[]>("register_application", { channel, extensions, zedPath }),
+  /** 移除 ZedG 的应用注册（仅 zedg 通道） */
+  unregisterApplication: (channel: ChannelKey) =>
+    invoke<LogLine[]>("unregister_application", { channel }),
+  /** 查询应用注册状态（只读） */
+  inspectApplicationRegistration: () =>
+    invoke<AppRegistration>("inspect_application_registration"),
   /** 检查扩展名的关联状态（只读） */
   inspectExtensions: (channel: ChannelKey, extensions: string[]) =>
     invoke<ExtStatus[]>("inspect_extensions", { channel, extensions }),
