@@ -27,11 +27,13 @@ anyhow = "1.0"
 windows-registry = "0.2"
 # windows-registry 的错误类型来源（用于按错误码判断「键/值不存在」）
 windows-result = "0.2"
-# Win32 API 绑定（Shell 刷新）
+# Win32 API 绑定（Shell 刷新 + 图标渲染）
 windows = { version = "0.58", features = [
-    "Win32_UI_Shell",         # SHChangeNotify：修改关联后通知 Shell 刷新图标
-    "Win32_Foundation",       # 基础类型（HANDLE、WIN32_ERROR 等）
-    "Win32_System_Threading", # 线程/等待原语
+    "Win32_UI_Shell",                 # SHChangeNotify / SHDefExtractIconW：刷新与取图标
+    "Win32_UI_WindowsAndMessaging",   # GetIconInfo / DestroyIcon：读图标位图
+    "Win32_Graphics_Gdi",             # GetDIBits / GetObjectW：读像素
+    "Win32_Foundation",               # 基础类型（HANDLE、WIN32_ERROR 等）
+    "Win32_System_Threading",         # 线程/等待原语
 ] }
 
 [profile.release]

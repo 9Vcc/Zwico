@@ -20,6 +20,7 @@
 
 mod association;
 mod icon;
+mod iconrender;
 mod refresh;
 mod registry;
 mod zed;
@@ -180,6 +181,17 @@ impl From<TargetDto> for IconTarget {
     }
 }
 
+/// 自动扫描到的 Zed 安装（前端列表用）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallationDto {
+    path: String,
+    /// 通道 key
+    channel: String,
+    /// 来源说明（卸载注册表 / 常见安装目录 / scoop / PATH）
+    source: String,
+}
+
 /// 撤销快照：写入前记录的 DefaultIcon 原值
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -211,9 +223,7 @@ struct UndoStatusDto {
 }
 
 /// 撤销快照文件名（保存在应用数据目录）
-const UNDO_FILE: &str = "undo.json";
-
-/// 在阻塞池执行闭包，统一处理 join 失败
+const UNDO_FILE: &str = "undo.json";/// 在阻塞池执行闭包，统一处理 join 失败
 ///
 /// 注册表与文件系统操作一律经此进入后台线程（Tauri 主线程同步执行会冻结窗口）。
 async fn blocking<T, F>(f: F) -> Result<T, String>
@@ -302,10 +312,23 @@ async fn bootstrap() -> Result<BootstrapDto, String> {
         let auto_selected = channel != Channel::Stable;
 
         let Loaded {
-            zed_path,
+            mut zed_path,
             associations,
             mut log,
         } = load_sync(channel)?;
+
+        // 当前通道探测不到时，全量扫描一次并自动选用第一个可用安装
+        if zed_path.is_none() {
+            if let Some(found) = zed::scan_installations().into_iter().next() {
+                log.push(warn(format!(
+                    "当前通道未检测到 Zed，已自动选用扫描到的 {}（来源：{}）",
+                    found.path.display(),
+                    found.source
+                )));
+                zed_path = Some(found.path.display().to_string());
+            }
+        }
+
         if auto_selected {
             log.insert(
                 0,
@@ -690,6 +713,125 @@ async fn undo_last(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Log
     .await
 }
 
+/// 扫描本机所有可用的 Zed 安装（跨通道、多来源），供界面挑选或自动兜底
+#[tauri::command]
+async fn scan_zed_installations() -> Result<Vec<InstallationDto>, String> {
+    blocking(move || {
+        Ok(zed::scan_installations()
+            .into_iter()
+            .map(|item| InstallationDto {
+                path: item.path.display().to_string(),
+                channel: item.channel.as_key().to_string(),
+                source: item.source.to_string(),
+            })
+            .collect())
+    })
+    .await
+}
+
+/// 把 DefaultIcon 值渲染成 PNG data URL（列表内图标预览）
+///
+/// 失败返回 `None`，前端回退到文字标签；结果在后端按「值 + 尺寸」缓存。
+#[tauri::command]
+async fn preview_icon(value: String, size: Option<u32>) -> Result<Option<String>, String> {
+    blocking(move || {
+        let size = size.unwrap_or(16).clamp(8, 256);
+        Ok(iconrender::render_data_url(&value, size))
+    })
+    .await
+}
+
+// ---------- 窗口控制（自定义标题栏；均为瞬时 UI 操作，无 IO，可同步执行） ----------
+
+/// 最小化窗口
+#[tauri::command]
+fn window_minimize(window: tauri::Window) {
+    let _ = window.minimize();
+}
+
+/// 最大化 / 还原窗口
+#[tauri::command]
+fn window_toggle_maximize(window: tauri::Window) {
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+}
+
+/// 关闭窗口
+///
+/// 必须走 `close()` 而不是 `destroy()`：前者会触发 `CloseRequested`，
+/// 从而在任务进行中仍被关窗拦截逻辑挡住（D8）。
+#[tauri::command]
+fn window_close(window: tauri::Window) {
+    let _ = window.close();
+}
+
+/// 开始拖动窗口（自定义标题栏的拖拽区）
+#[tauri::command]
+fn start_window_drag(window: tauri::Window) {
+    let _ = window.start_dragging();
+}
+
+/// 查询窗口是否处于最大化（前端初始化时同步按钮状态）
+#[tauri::command]
+fn window_is_maximized(window: tauri::Window) -> bool {
+    window.is_maximized().unwrap_or(false)
+}
+
+// ---------- SVG / ICO 文件（SVG 转 ICO 工具用） ----------
+
+/// SVG / ICO 文件大小上限（4 MiB）
+const IMAGE_FILE_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+/// 读取 SVG 文本（限 `.svg`，用于前端光栅化）
+#[tauri::command]
+async fn read_svg_file(path: String) -> Result<String, String> {
+    blocking(move || {
+        let path = PathBuf::from(path.trim());
+        let is_svg = path
+            .extension()
+            .map(|ext| ext.eq_ignore_ascii_case("svg"))
+            .unwrap_or(false);
+        if !is_svg {
+            return Err("请选择 .svg 文件".to_string());
+        }
+        let meta = std::fs::metadata(&path).map_err(|err| format!("无法读取 SVG 文件：{err}"))?;
+        if meta.len() > IMAGE_FILE_MAX_BYTES {
+            return Err(format!(
+                "SVG 文件过大（{} KiB，上限 4 MiB）",
+                meta.len() / 1024
+            ));
+        }
+        std::fs::read_to_string(&path).map_err(|err| format!("读取 SVG 失败：{err}"))
+    })
+    .await
+}
+
+/// 保存生成的 ICO（限 `.ico`；数据由前端光栅化 SVG 后打包而成）
+#[tauri::command]
+async fn save_ico_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    blocking(move || {
+        let path = PathBuf::from(path.trim());
+        let is_ico = path
+            .extension()
+            .map(|ext| ext.eq_ignore_ascii_case("ico"))
+            .unwrap_or(false);
+        if !is_ico {
+            return Err("请选择 .ico 作为保存格式".to_string());
+        }
+        if data.is_empty() {
+            return Err("生成的图标数据为空".to_string());
+        }
+        if data.len() as u64 > IMAGE_FILE_MAX_BYTES {
+            return Err("生成的图标过大（超过 4 MiB）".to_string());
+        }
+        std::fs::write(&path, data).map_err(|err| format!("写图标失败：{err}"))
+    })
+    .await
+}
+
 /// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
 #[tauri::command]
 fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
@@ -756,6 +898,8 @@ pub fn run() {
             bootstrap,
             load_state,
             scan_ico_count,
+            scan_zed_installations,
+            preview_icon,
             apply_icons,
             remove_icons,
             refresh_explorer,
@@ -763,17 +907,29 @@ pub fn run() {
             undo_last,
             save_preset_file,
             load_preset_file,
+            read_svg_file,
+            save_ico_file,
+            window_minimize,
+            window_toggle_maximize,
+            window_close,
+            start_window_drag,
+            window_is_maximized,
             confirm_quit
         ])
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // 任务进行中拦截关闭，让前端弹确认框；确认后走 confirm_quit
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 let state = window.app_handle().state::<AppState>();
                 if state.busy.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.emit("close-requested", ());
                 }
             }
+            // 自定义标题栏的按钮图标要跟随最大化状态变化
+            tauri::WindowEvent::Resized(_) => {
+                let _ = window.emit("window-maximized", window.is_maximized().unwrap_or(false));
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

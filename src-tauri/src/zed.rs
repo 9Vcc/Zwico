@@ -5,6 +5,7 @@
 //! - 探测指定通道的 Zed 可执行文件位置：
 //!   卸载注册表 → 常见安装目录 → scoop（含自定义根目录的 shim 解析）
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use windows_registry::CURRENT_USER;
@@ -268,27 +269,330 @@ fn find_from_scoop_shim(scoop_app: &str) -> Option<PathBuf> {
         }
 
         let shim_file = Path::new(dir).join(&shim_name);
-        let Ok(content) = std::fs::read_to_string(&shim_file) else {
+        if let Some(path) = read_shim_target(&shim_file) {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
+/// 解析 scoop shim 文件
+///
+/// shim 内容形如：
+///
+/// ```text
+/// path = "D:\Scoop\apps\zedg\current\bin\ZedG.exe"
+/// ```
+fn read_shim_target(shim: &Path) -> Option<PathBuf> {
+    let content = std::fs::read_to_string(shim).ok()?;
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(rest) = line
+            .strip_prefix("path")
+            .and_then(|r| r.trim_start().strip_prefix('='))
+        {
+            let path = PathBuf::from(rest.trim().trim_matches('"'));
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+// ---------- 全量扫描：列出本机所有可用的 Zed 安装 ----------
+
+/// 一处自动扫描到的 Zed 安装
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Installation {
+    /// 可执行文件完整路径
+    pub path: PathBuf,
+    /// 由文件名/路径推断出的通道
+    pub channel: Channel,
+    /// 来源说明（展示给用户，便于判断可信度）
+    pub source: &'static str,
+}
+
+/// 文件名是否像一个 Zed 可执行文件（`zed.exe` / `ZedG.exe` / `Zed Preview.exe` …）
+fn looks_like_zed_exe(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    name.ends_with(".exe") && name.contains("zed")
+}
+
+/// 由可执行文件名精确反推通道（非标准命名返回 None）
+fn channel_of_exe(path: &Path) -> Option<Channel> {
+    let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+    Channel::ALL
+        .iter()
+        .copied()
+        .find(|c| c.exe_name().to_ascii_lowercase() == name)
+}
+
+/// 宽松推断通道：文件名精确匹配优先，其次看路径里是否含通道关键字
+fn guess_channel(path: &Path) -> Channel {
+    if let Some(channel) = channel_of_exe(path) {
+        return channel;
+    }
+    let lower = path.to_string_lossy().to_ascii_lowercase();
+    Channel::ALL
+        .iter()
+        .copied()
+        .find(|c| c != &Channel::Stable && lower.contains(c.as_key()))
+        .unwrap_or(Channel::Stable)
+}
+
+/// 登记一个候选（去重 + 存在性校验）
+fn push_candidate(
+    found: &mut Vec<Installation>,
+    seen: &mut HashSet<String>,
+    path: PathBuf,
+    source: &'static str,
+) {
+    if !path.is_file() {
+        return;
+    }
+    let key = path.to_string_lossy().to_ascii_lowercase();
+    if !seen.insert(key) {
+        return;
+    }
+    let channel = guess_channel(&path);
+    found.push(Installation {
+        path,
+        channel,
+        source,
+    });
+}
+
+/// 全量扫描本机的 Zed 安装：卸载注册表 → 常见目录 → scoop → PATH
+///
+/// 与 [`detect_zed_path`] 的区别：不限定通道、不提前返回，尽量把所有候选都列出来，
+/// 供界面让用户挑选（或在前述探测失败时自动兜底）。
+pub fn scan_installations() -> Vec<Installation> {
+    let mut found: Vec<Installation> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    scan_from_uninstall(&mut found, &mut seen);
+    scan_from_common_dirs(&mut found, &mut seen);
+    scan_from_scoop_dirs(&mut found, &mut seen);
+    scan_from_path(&mut found, &mut seen);
+
+    // 通道顺序优先（稳定版 → 预览版 → 每夜版 → 汉化版），其次按路径字典序，保证结果稳定
+    found.sort_by(|a, b| {
+        channel_rank(a.channel)
+            .cmp(&channel_rank(b.channel))
+            .then_with(|| {
+                a.path
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .cmp(&b.path.to_string_lossy().to_ascii_lowercase())
+            })
+    });
+
+    println!("[关联] 扫描到 {} 处 Zed 安装", found.len());
+    found
+}
+
+fn channel_rank(channel: Channel) -> usize {
+    Channel::ALL
+        .iter()
+        .position(|c| *c == channel)
+        .unwrap_or(usize::MAX)
+}
+
+/// 来源一：卸载注册表（DisplayName 含 zed 的条目，不限定通道）
+fn scan_from_uninstall(found: &mut Vec<Installation>, seen: &mut HashSet<String>) {
+    let Ok(uninstall) = CURRENT_USER.open(UNINSTALL_KEY) else {
+        return;
+    };
+    let Ok(subkeys) = uninstall.keys() else {
+        return;
+    };
+
+    for name in subkeys {
+        let Ok(subkey) = uninstall.open(&name) else {
             continue;
         };
+        let display = subkey.get_string("DisplayName").unwrap_or_default();
+        if !display.to_ascii_lowercase().contains("zed") {
+            continue;
+        }
+        let Ok(dir) = subkey.get_string("InstallLocation") else {
+            continue;
+        };
+        let dir = PathBuf::from(dir);
 
-        // 解析 path = "..." 行，提取引号内的可执行文件路径
-        for line in content.lines() {
-            let line = line.trim();
-            if let Some(rest) = line
-                .strip_prefix("path")
-                .and_then(|r| r.trim_start().strip_prefix('='))
-            {
-                let target = rest.trim().trim_matches('"');
-                let path = PathBuf::from(target);
-                if path.is_file() {
-                    return Some(path);
+        // 先按已知通道的可执行文件名找
+        let mut hit = false;
+        for channel in Channel::ALL {
+            let exe = dir.join(channel.exe_name());
+            if exe.is_file() {
+                push_candidate(found, seen, exe, "卸载注册表");
+                hit = true;
+            }
+        }
+        // 命名不标准时扫描目录
+        if !hit {
+            if let Ok(entries) = std::fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if looks_like_zed_exe(&path) {
+                        push_candidate(found, seen, path, "卸载注册表");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 来源二：常见安装目录（含 `%LOCALAPPDATA%\Programs` 下名字含 zed 的目录）
+fn scan_from_common_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<String>) {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        roots.push(PathBuf::from(local).join("Programs"));
+    }
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        roots.push(PathBuf::from(program_files));
+    }
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+        roots.push(PathBuf::from(program_files_x86));
+    }
+
+    for root in roots {
+        for channel in Channel::ALL {
+            push_candidate(
+                found,
+                seen,
+                root.join(channel.app_name()).join(channel.exe_name()),
+                "常见安装目录",
+            );
+            push_candidate(
+                found,
+                seen,
+                root.join("Zed").join(channel.exe_name()),
+                "常见安装目录",
+            );
+        }
+
+        // 一级子目录里名字含 zed 的（只深入这些目录，避免全盘遍历）
+        let Ok(entries) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let name = dir
+                .file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            if !name.contains("zed") {
+                continue;
+            }
+            if let Ok(items) = std::fs::read_dir(&dir) {
+                for item in items.flatten() {
+                    let path = item.path();
+                    if looks_like_zed_exe(&path) {
+                        push_candidate(found, seen, path, "常见安装目录");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 来源三：scoop（默认根、PATH 指向的自定义根、shims 里的 shim 文件）
+fn scan_from_scoop_dirs(found: &mut Vec<Installation>, seen: &mut HashSet<String>) {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        roots.push(PathBuf::from(home).join("scoop"));
+    }
+
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in path_var.split(';') {
+            let trimmed = dir.trim().trim_end_matches('\\');
+            if !trimmed.to_ascii_lowercase().ends_with("shims") {
+                continue;
+            }
+            // shims 的父目录即 scoop 根（支持 D:\Scoop 这类自定义根）
+            if let Some(parent) = Path::new(trimmed).parent() {
+                roots.push(parent.to_path_buf());
+            }
+            // 直接解析 shim 文件
+            let Ok(entries) = std::fs::read_dir(trimmed) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                    .unwrap_or_default();
+                if !name.contains("zed") {
+                    continue;
+                }
+                if name.ends_with(".shim") {
+                    if let Some(target) = read_shim_target(&path) {
+                        push_candidate(found, seen, target, "scoop shim");
+                    }
+                } else if looks_like_zed_exe(&path) {
+                    push_candidate(found, seen, path, "PATH");
                 }
             }
         }
     }
 
-    None
+    for root in roots {
+        let apps = root.join("apps");
+        let Ok(entries) = std::fs::read_dir(&apps) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let package = entry.path();
+            let name = package
+                .file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            if !name.contains("zed") {
+                continue;
+            }
+            let current = package.join("current");
+            for base in [current.join("bin"), current] {
+                let Ok(items) = std::fs::read_dir(&base) else {
+                    continue;
+                };
+                for item in items.flatten() {
+                    let path = item.path();
+                    if looks_like_zed_exe(&path) {
+                        push_candidate(found, seen, path, "scoop 安装");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 来源四：PATH 中直接可见的可执行文件
+fn scan_from_path(found: &mut Vec<Installation>, seen: &mut HashSet<String>) {
+    let Ok(path_var) = std::env::var("PATH") else {
+        return;
+    };
+    for dir in path_var.split(';') {
+        let dir = dir.trim();
+        if dir.is_empty() {
+            continue;
+        }
+        for channel in Channel::ALL {
+            let exe = Path::new(dir).join(channel.exe_name());
+            if exe.is_file() {
+                push_candidate(found, seen, exe, "PATH");
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -349,6 +653,40 @@ mod tests {
         if let Some(path) = find_from_scoop_shim("zedg") {
             assert!(path.is_file(), "shim 指向的文件应存在：{}", path.display());
             assert!(path.to_string_lossy().to_lowercase().ends_with(".exe"));
+        }
+    }
+
+    /// 可执行文件启发式：识别 Zed 系列、排除无关程序
+    #[test]
+    fn zed_exe_heuristics() {
+        assert!(looks_like_zed_exe(Path::new(r"D:\x\zed.exe")));
+        assert!(looks_like_zed_exe(Path::new(r"D:\x\ZedG.exe")));
+        assert!(looks_like_zed_exe(Path::new(r"D:\x\Zed Preview.exe")));
+        assert!(!looks_like_zed_exe(Path::new(r"D:\x\code.exe")));
+        assert!(!looks_like_zed_exe(Path::new(r"D:\x\zed.log")));
+
+        assert_eq!(channel_of_exe(Path::new(r"D:\x\ZedG.exe")), Some(Channel::Zedg));
+        assert_eq!(channel_of_exe(Path::new(r"D:\x\zed.exe")), Some(Channel::Stable));
+        assert_eq!(channel_of_exe(Path::new(r"D:\x\other.exe")), None);
+
+        // 命名不标准时按路径关键字兜底
+        assert_eq!(guess_channel(Path::new(r"D:\Scoop\apps\zedg\current\bin\foo.exe")), Channel::Zedg);
+        assert_eq!(guess_channel(Path::new(r"D:\x\mystery.exe")), Channel::Stable);
+    }
+
+    /// 全量扫描：不得 panic；返回项必须真实存在且不重复
+    #[test]
+    fn scan_is_safe_and_deduplicated() {
+        let list = scan_installations();
+        let mut seen = std::collections::HashSet::new();
+        for item in &list {
+            assert!(item.path.is_file(), "扫描结果必须存在：{}", item.path.display());
+            assert!(
+                seen.insert(item.path.to_string_lossy().to_ascii_lowercase()),
+                "扫描结果出现重复：{}",
+                item.path.display()
+            );
+            assert!(!item.source.is_empty());
         }
     }
 }

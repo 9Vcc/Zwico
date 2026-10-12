@@ -16,9 +16,12 @@
         "title": "Zed 文件关联图标管理器",
         "width": 960,
         "height": 720,
-        "minWidth": 760,
-        "minHeight": 540,
-        "resizable": true
+        "minWidth": 780,
+        "minHeight": 560,
+        "center": true,
+        "resizable": true,
+        "decorations": false,
+        "shadow": true
       }
     ],
     "security": {
