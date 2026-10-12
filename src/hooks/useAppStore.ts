@@ -27,7 +27,13 @@ import {
 import { baseName } from "../lib/iconInfo";
 import { resolveLang, setLang, t, tEncoded, type LangPref } from "../lib/i18n";
 import { clampLogHeight, clampSidebarWidth } from "../lib/layout";
-import { buildPreset, parsePreset, presetFileName, presetToText } from "../lib/presets";
+import {
+  allPresetExtensions,
+  buildPreset,
+  parsePreset,
+  presetFileName,
+  presetToText,
+} from "../lib/presets";
 import { useSvgIco } from "./useSvgIco";
 import { useToasts } from "./useToast";
 
@@ -384,9 +390,9 @@ export function useAppStore() {
     void refreshAppReg();
   }, [refreshAppReg]);
 
-  /** 完整注册 ZedG（覆盖关注列表中的扩展名；不改变默认打开方式） */
+  /** 完整注册 ZedG（覆盖 = 关注列表 ∪ 全部预置扩展名；不改变默认打开方式） */
   const registerApp = useCallback(async () => {
-    const list = watched;
+    const list = [...new Set([...watched, ...allPresetExtensions()])].sort();
     if (list.length === 0) {
       push("warn", t("appReg.empty"));
       return;

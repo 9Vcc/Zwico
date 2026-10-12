@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { APP_VERSION, CHANNELS, type AppRegistration, type ExtStatus, type ZedInstallation } from "../api";
 import { baseName } from "../lib/iconInfo";
+import { EXT_PATTERN, PRESET_GROUPS } from "../lib/presets";
 import { t, type LangPref } from "../lib/i18n";
 import type { ChannelKey } from "../api";
 import { Select } from "./Select";
@@ -25,20 +26,6 @@ import {
   Spinner,
   Switch,
 } from "./ui";
-
-/** 预置常用扩展名（按用途分组，供用户直接勾选） */
-const PRESET_GROUPS: { key: string; exts: string[] }[] = [
-  {
-    key: "code",
-    exts: ["py", "rs", "go", "js", "ts", "tsx", "jsx", "vue", "java", "c", "cpp", "h", "cs", "rb", "php", "swift", "kt", "lua", "sh", "sql"],
-  },
-  { key: "config", exts: ["json", "yaml", "yml", "toml", "ini", "conf", "env", "xml"] },
-  { key: "doc", exts: ["md", "txt", "rst", "tex", "csv", "log"] },
-  { key: "web", exts: ["html", "htm", "css", "scss", "less", "svelte"] },
-];
-
-/** 扩展名合法性（与后端 register::is_valid_extension 保持一致） */
-const EXT_PATTERN = /^[a-z0-9_+-]{1,32}$/;
 
 const SHORTCUTS: { keys: string; actionKey: string }[] = [
   { keys: "Ctrl + A", actionKey: "shortcut.selectAll" },

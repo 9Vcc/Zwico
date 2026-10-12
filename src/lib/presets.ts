@@ -6,6 +6,25 @@ import type { IconMode } from "../api";
 import { timestampSlug } from "./iconInfo";
 
 export const PRESET_FORMAT = "rsicon-preset";
+
+/** 预置常用扩展名（按用途分组）：应用注册与「关联扩展名」勾选共用 */
+export const PRESET_GROUPS: { key: string; exts: string[] }[] = [
+  {
+    key: "code",
+    exts: ["py", "rs", "go", "js", "ts", "tsx", "jsx", "vue", "java", "c", "cpp", "h", "cs", "rb", "php", "swift", "kt", "lua", "sh", "sql"],
+  },
+  { key: "config", exts: ["json", "yaml", "yml", "toml", "ini", "conf", "env", "xml"] },
+  { key: "doc", exts: ["md", "txt", "rst", "tex", "csv", "log"] },
+  { key: "web", exts: ["html", "htm", "css", "scss", "less", "svelte"] },
+];
+
+/** 扩展名合法性（与后端 register::is_valid_extension 保持一致） */
+export const EXT_PATTERN = /^[a-z0-9_+-]{1,32}$/;
+
+/** 预置组的全部扩展名（去重排序） */
+export function allPresetExtensions(): string[] {
+  return [...new Set(PRESET_GROUPS.flatMap((g) => g.exts))].sort();
+}
 export const PRESET_VERSION = 1;
 
 export interface Preset {
