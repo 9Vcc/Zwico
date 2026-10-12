@@ -243,6 +243,10 @@ export default function App() {
           onLangChange={store.setLangPref}
           autostart={store.autostart}
           onToggleAutostart={() => void store.toggleAutostart()}
+          startupApply={store.startupApply}
+          startupRefreshCache={store.startupRefreshCache}
+          onStartupApplyChange={(value) => store.setStartupApply(value)}
+          onStartupRefreshCacheChange={(value) => store.setStartupRefreshCache(value)}
           onToggleLogCollapsed={store.toggleLogCollapsed}
           onResetSidebar={() => store.setSidebarWidth(288)}
           onResetLogHeight={() => store.setLogHeight(150)}

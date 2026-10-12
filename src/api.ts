@@ -158,6 +158,8 @@ export const api = {
   isAutostartEnabled: () => invoke<boolean>("is_autostart_enabled"),
   /** 默认自定义图标目录（应用目录下的 icon 文件夹，后端探测） */
   defaultIconDir: () => invoke<string>("default_icon_dir"),
+  /** 广播关联变更通知（刷新系统图标缓存，轻量） */
+  notifyIconRefresh: () => invoke<void>("notify_icon_refresh"),
   startWindowDrag: () => invoke<void>("start_window_drag"),
   windowIsMaximized: () => invoke<boolean>("window_is_maximized"),
 };

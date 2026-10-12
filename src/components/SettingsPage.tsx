@@ -53,6 +53,8 @@ export function SettingsPage({
   appReg,
   channel,
   autostart,
+  startupApply,
+  startupRefreshCache,
   viewport,
   onBack,
   onThemeChange,
@@ -74,6 +76,8 @@ export function SettingsPage({
   onRegisterApp,
   onUnregisterApp,
   onToggleAutostart,
+  onStartupApplyChange,
+  onStartupRefreshCacheChange,
   onOpenDefaultApps,
 }: {
   theme: "dark" | "light";
@@ -96,6 +100,10 @@ export function SettingsPage({
   channel: ChannelKey;
   /** 开机自启动（系统实际状态） */
   autostart: boolean;
+  /** 启动时自动应用图标（默认关闭） */
+  startupApply: boolean;
+  /** 启动时刷新系统图标缓存（默认关闭） */
+  startupRefreshCache: boolean;
   /** 关注项的关联状态（诊断"为什么注册了没生效"） */
   extStatus: Record<string, ExtStatus>;
   /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
@@ -120,6 +128,8 @@ export function SettingsPage({
   onRegisterApp: () => void;
   onUnregisterApp: () => void;
   onToggleAutostart: () => void;
+  onStartupApplyChange: (value: boolean) => void;
+  onStartupRefreshCacheChange: (value: boolean) => void;
   onOpenDefaultApps: () => void;
 }) {
   const [customInput, setCustomInput] = useState("");
@@ -193,13 +203,6 @@ export function SettingsPage({
               </div>
             </div>
 
-            <Switch
-              checked={autostart}
-              onChange={() => onToggleAutostart()}
-              label={t("settings.autostart")}
-              title={t("settings.autostart.tip")}
-            />
-
             <div className="settings__row">
               <span className="field__label">{t("settings.language")}</span>
               <Select
@@ -243,6 +246,27 @@ export function SettingsPage({
                 </button>
               </div>
             </div>
+          </Card>
+
+          <Card title={t("settings.startup")} hint={t("settings.startup.hint")}>
+            <Switch
+              checked={autostart}
+              onChange={() => onToggleAutostart()}
+              label={t("settings.autostart")}
+              title={t("settings.autostart.tip")}
+            />
+            <Switch
+              checked={startupApply}
+              onChange={() => onStartupApplyChange(!startupApply)}
+              label={t("settings.startupApply")}
+              title={t("settings.startupApply.tip")}
+            />
+            <Switch
+              checked={startupRefreshCache}
+              onChange={() => onStartupRefreshCacheChange(!startupRefreshCache)}
+              label={t("settings.startupRefreshCache")}
+              title={t("settings.startupRefreshCache.tip")}
+            />
           </Card>
 
           <Card title={t("settings.zed")} hint={t("settings.zed.hint")}>

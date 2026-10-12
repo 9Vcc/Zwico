@@ -900,6 +900,18 @@ async fn default_icon_dir(app: AppHandle) -> Result<String, String> {
         .to_string())
 }
 
+/// 广播关联变更通知（刷新系统图标缓存）
+///
+/// SHChangeNotify(SHCNE_ASSOCCHANGED)：让资源管理器立即重新读取关联与图标，
+/// 比「立即刷新资源管理器」轻量（不清缓存文件、不重启 Explorer）。
+#[tauri::command]
+async fn notify_icon_refresh() -> Result<(), String> {
+    blocking(move || {
+        refresh::notify_system().map_err(|err| encoded("back.notifyFailed", &[err.to_string()]))
+    })
+    .await
+}
+
 /// 开始拖动窗口（自定义标题栏的拖拽区）
 #[tauri::command]
 fn start_window_drag(window: tauri::Window) {
@@ -1284,6 +1296,7 @@ pub fn run() {
             set_autostart,
             is_autostart_enabled,
             default_icon_dir,
+            notify_icon_refresh,
         ])
         .on_window_event(|window, event| match event {
             // 关闭 = 隐藏到托盘（常驻后台，任务继续跑）；退出只能通过托盘菜单。

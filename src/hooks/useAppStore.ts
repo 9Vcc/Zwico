@@ -57,6 +57,10 @@ interface PersistedConfig {
   logCollapsed: boolean;
   /** 界面语言：auto = 跟随系统 */
   lang: LangPref;
+  /** 启动时自动应用图标（默认关闭） */
+  startupApply: boolean;
+  /** 启动时刷新系统图标缓存（默认关闭） */
+  startupRefreshCache: boolean;
   /** 关注列表：常用扩展名，用于筛选与一键建立关联 */
   watched: string[];
   /** 主界面是否只显示关注项 */
@@ -74,6 +78,8 @@ const DEFAULT_CONFIG: PersistedConfig = {
   logHeight: 150,
   logCollapsed: false,
   lang: "auto",
+  startupApply: false,
+  startupRefreshCache: false,
   watched: [],
   watchedOnly: false,
 };
@@ -161,6 +167,8 @@ export function useAppStore() {
     logHeight,
     logCollapsed,
     lang,
+    startupApply,
+    startupRefreshCache,
   } = config;
 
   // 语言：auto 时跟随系统；变化时同步给 i18n 模块并触发整树重渲染
@@ -457,6 +465,17 @@ export function useAppStore() {
     }
   }, [autostart, fail]);
 
+  /** 启动时刷新系统图标缓存：SHChangeNotify 广播（轻量、幂等）。
+      需在设置中开启「启动时刷新系统图标缓存」（默认关闭） */
+  const lastStartupRefresh = useRef("");
+  useEffect(() => {
+    if (!loaded || !startupRefreshCache) return;
+    const key = `${channel}|startup-refresh`;
+    if (lastStartupRefresh.current === key) return;
+    lastStartupRefresh.current = key;
+    void api.notifyIconRefresh().catch(() => {});
+  }, [loaded, startupRefreshCache, channel]);
+
   /** 打开系统「默认应用」设置页（唯一能真正改变默认打开方式的途径） */
   const openDefaultApps = useCallback(async () => {
     try {
@@ -596,10 +615,12 @@ export function useAppStore() {
     }
   }, [appendLogs, channel, fail, load, push, refreshUndoStatus, selectedList, succeed, toTargets]);
 
-  /** 自定义模式：启动 / 切模式 / 换目录时自动重新应用一次图标（含系统通知） */
+  /** 自定义模式：启动 / 切模式 / 换目录时自动重新应用一次图标（含系统通知）。
+      需在设置中开启「启动时自动应用图标」（默认关闭） */
   const lastAutoApply = useRef("");
   useEffect(() => {
     if (!loaded || busy) return;
+    if (!startupApply) return;
     if (mode !== "custom") return;
     if (effectiveCustomDir.trim() === "") return;
     const key = `${channel}|${effectiveCustomDir}`;
@@ -608,7 +629,7 @@ export function useAppStore() {
     void applyAll();
     // applyAll 的引用变化不重跑：load 后 associations 换新引用会让 applyAll
     // 重建，这里靠 key 拦截重复应用，避免死循环
-  }, [loaded, busy, mode, channel, effectiveCustomDir, applyAll]);
+  }, [loaded, busy, mode, channel, effectiveCustomDir, applyAll, startupApply]);
 
   /** 一键修复失效图标：按当前模式重设所有 iconState === "missing" 的项 */
   const repairInvalid = useCallback(() => {
@@ -924,6 +945,8 @@ export function useAppStore() {
     autostart,
     defaultIconDir,
     effectiveCustomDir,
+    startupApply,
+    startupRefreshCache,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -958,6 +981,8 @@ export function useAppStore() {
     registerApp,
     unregisterApp,
     toggleAutostart,
+    setStartupApply: (value: boolean) => patchConfig({ startupApply: value }),
+    setStartupRefreshCache: (value: boolean) => patchConfig({ startupRefreshCache: value }),
     openDefaultApps,
     setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,
