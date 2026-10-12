@@ -183,10 +183,29 @@ fn effective_prog_id(ext_key: &str) -> Option<(String, ProgIdSource)> {
         .map(|prog_id| (prog_id, ProgIdSource::ClassesDefault))
 }
 
-/// 读取 `FileExts\<ext>\UserChoice` 的 ProgId（只读；该键受保护不能改写）
-fn read_user_choice(ext_key: &str) -> Option<String> {
+/// 读取 `FileExts\<ext>\UserChoice` 的 ProgId（只读）
+///
+/// 同时供 `register.rs` 在"重置默认程序"前记录原值。
+pub(crate) fn read_user_choice(ext_key: &str) -> Option<String> {
     let path = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
     CURRENT_USER.open(path).ok()?.get_string("ProgId").ok()
+}
+
+/// 删除 `FileExts\<ext>\UserChoice`，让系统回退到 `Classes\<ext>` 默认值
+///
+/// **这是本工具唯一会删除系统键的操作**（DESIGN D37）：Windows 双击时优先使用
+/// `UserChoice`，删掉它即可让本工具写入的 Zed 关联生效 —— 相比改写该键，
+/// 无需计算 Hash、无需未文档化 API。
+///
+/// 返回是否真的删除了（键原本不存在时返回 false）。
+pub(crate) fn clear_user_choice(ext_key: &str) -> Result<bool> {
+    let path = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
+    let existed = CURRENT_USER.open(&path).is_ok();
+    if !existed {
+        return Ok(false);
+    }
+    registry::remove_absolute_tree(&path)?;
+    Ok(true)
 }
 
 /// 单个扩展名的关联状态（供设置页诊断「为什么关联没生效」）

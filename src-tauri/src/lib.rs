@@ -998,6 +998,110 @@ async fn open_default_apps_settings() -> Result<(), String> {
     .await
 }
 
+/// 把一批扩展名设为 Zed 的默认打开方式
+///
+/// **不可逆**：删除的原默认程序无法还原（重写 UserChoice 需要 Hash 校验），
+/// 因此只能由用户在设置页显式确认后触发。
+#[tauri::command]
+async fn set_default_extensions(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    channel: String,
+    extensions: Vec<String>,
+    zed_path: String,
+) -> Result<Vec<LogLineDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
+    if extensions.is_empty() {
+        return Err("back.noTargets".to_string());
+    }
+    let zed = PathBuf::from(zed_path.trim());
+    if zed_path.trim().is_empty() || !zed.is_file() {
+        return Err("back.appNeedsZed".to_string());
+    }
+
+    let _guard = BusyGuard::acquire(state.busy.clone());
+
+    blocking(move || {
+        let total = extensions.len();
+        let mut changed: Vec<(String, Option<String>)> = Vec::new();
+        let mut already: Vec<String> = Vec::new();
+        let mut skipped: Vec<(String, String)> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        for (index, ext) in extensions.iter().enumerate() {
+            if let Err(err) = window.emit(
+                "progress",
+                ProgressPayload {
+                    current: index + 1,
+                    total,
+                    extension: ext.clone(),
+                },
+            ) {
+                eprintln!("[警告] 发送进度事件失败：{err}");
+            }
+
+            match register::set_as_default(channel, ext, &zed) {
+                Ok(outcome) => {
+                    if !outcome.registered {
+                        skipped.push((
+                            outcome.extension,
+                            outcome.previous.unwrap_or_else(|| "?".to_string()),
+                        ));
+                    } else if outcome.cleared {
+                        changed.push((outcome.extension, outcome.previous));
+                    } else {
+                        already.push(outcome.extension);
+                    }
+                }
+                Err(err) => failed.push((ext.clone(), short_reason(&err))),
+            }
+        }
+
+        let mut log = Vec::new();
+        if !changed.is_empty() {
+            let detail = changed
+                .iter()
+                .map(|(ext, previous)| match previous {
+                    Some(owner) => format!("{ext} (← {owner})"),
+                    None => ext.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            log.push(info_p(
+                "back.defaultSet",
+                vec![changed.len().to_string(), detail],
+            ));
+        }
+        if !already.is_empty() {
+            log.push(info_p(
+                "back.defaultAlready",
+                vec![already.len().to_string(), already.join(", ")],
+            ));
+        }
+        if !skipped.is_empty() {
+            let detail = skipped
+                .iter()
+                .map(|(ext, owner)| format!("{ext} → {owner}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            log.push(warn_p(
+                "back.regTaken",
+                vec![skipped.len().to_string(), detail],
+            ));
+        }
+        if let Some(line) = failure_log(total, &failed) {
+            log.push(line);
+        }
+        if log.is_empty() {
+            log.push(info("back.defaultNothing"));
+        }
+        log.push(notify_log());
+        Ok(log)
+    })
+    .await
+}
+
 /// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
 #[tauri::command]
 fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
@@ -1066,6 +1170,7 @@ pub fn run() {
             apply_icons,
             remove_icons,
             register_extensions,
+            set_default_extensions,
             inspect_extensions,
             open_default_apps_settings,
             refresh_explorer,
