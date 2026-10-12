@@ -342,6 +342,20 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
   - 提供 `open_default_apps_settings` 一键打开系统「默认应用」页 —— 那是唯一官方支持、能真正改变默认打开方式的途径（Windows 11 支持按应用批量设置）。
 - 已评估但暂不做：自行实现 Hash 算法（MD5 + `NtSetInformationKey` 设置键的 LastWriteTime）直接改写 UserChoice。技术上可行（第三方工具如 SetUserFTA 长期使用），但风险高（写错会破坏用户既有选择）、且需要未文档化 API，属于需要用户明确决策的事项。
 
+### D38 · 应用注册（仅 zedg 通道）
+
+**背景**：Scoop 安装不写任何关联注册表 → 系统「默认应用」列表与右键「打开方式」都看不到 ZedG（官方安装器自带此注册，所以仅汉化版需要）。工具据此提供「应用注册」，补齐候选注册的完整形态。
+
+**写入四层**（全部 HKCU）：
+1. `Software\RegisteredApplications` 条目 `"ZedG" → Software\ZedG\Capabilities` —— **系统「默认应用」列表的数据源**，缺了它设置页永远看不到；
+2. `Software\ZedG\Capabilities`：`ApplicationName` / `ApplicationDescription` / `FileAssociations\.<ext> = ZedG.<ext>`；
+3. 每个扩展名的 ProgID（`ZedG.<ext>`：默认值 + `DefaultIcon` + `shell\open\command`）；
+4. `Classes\.<ext>\OpenWithProgids` 挂候选（保留其他程序条目）+ `Classes\Applications\ZedG.exe` 通用键。
+
+**边界**：仍属候选注册 —— 不写 UserChoice、不改 `Classes\<ext>` 默认值，**不改变任何扩展名的打开方式**；覆盖范围 = 关注列表（用户勾选的表达）。移除注册会清理上述全部条目，不影响其他程序。
+
+**实现要点**：`RegisteredApplications` 与 `Capabilities` 不在 `Software\Classes` 下，因此 `registry.rs` 新增了一批 **HKCU 根相对路径** 的通用函数（`set_named_value` / `get_named_value` / `remove_named_value` / `value_names` / `delete_key_tree`），与 Classes 前缀版并存；`windows_registry` 的 `values()` 迭代器直接产出 `(String, Value)`，没有 `Result` 包装（与 `keys()` 不同，容易踩）。
+
 ---
 
 ## 5. 已知限制

@@ -134,6 +134,23 @@
 
 ---
 
+## 0.10 第十轮：应用注册（2026-10-12 晚）
+
+需求：ZedG（Scoop 安装）不出现在系统「默认应用」与右键「打开方式」，做成工具功能补齐。
+
+| 项 | 处理 |
+|---|---|
+| 根因 | Scoop 安装不写关联注册表（实测验证注册表零痕迹）；官方安装器自带 |
+| 后端 | `register.rs` 新增 `register_application` / `unregister_application` / `application_registration_status`；写四层候选注册（RegisteredApplications + Capabilities + ProgID + OpenWithProgids/Applications）；移除时全部清理且不影响其他程序 |
+| 通道限制 | 仅 zedg 通道：前端条件渲染 + 后端 `Channel::Zedg` 校验双保险 |
+| 边界 | 候选注册，不写 UserChoice、不改扩展名默认值 —— D35 边界内 |
+| 前端 | 设置页新增「应用注册」卡片（仅 zedg 渲染），覆盖范围 = 关注列表，状态徽标自动刷新 |
+| 依赖 | registry.rs 新增 HKCU 根相对的通用值操作函数 |
+
+**验证**：31 测试全绿、clippy 0 告警、i18n 417 条中英一致且 327 引用全命中、`pnpm build` 通过。
+
+---
+
 ## 1. 结构评估
 
 ### 1.1 做得好的部分
