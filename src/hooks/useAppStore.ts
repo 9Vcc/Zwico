@@ -31,7 +31,7 @@ import { useSvgIco } from "./useSvgIco";
 import { useToasts } from "./useToast";
 
 export type Theme = "dark" | "light";
-export type DialogKind = "remove" | "refresh" | "quit" | "undo";
+export type DialogKind = "remove" | "refresh" | "quit" | "undo" | "register";
 /** 主视图：主界面 / 设置页 */
 export type AppView = "main" | "settings";
 
@@ -50,6 +50,10 @@ interface PersistedConfig {
   logCollapsed: boolean;
   /** 界面语言：auto = 跟随系统 */
   lang: LangPref;
+  /** 关注列表：常用扩展名，用于筛选与一键建立关联 */
+  watched: string[];
+  /** 主界面是否只显示关注项 */
+  watchedOnly: boolean;
 }
 
 const DEFAULT_CONFIG: PersistedConfig = {
@@ -63,6 +67,8 @@ const DEFAULT_CONFIG: PersistedConfig = {
   logHeight: 150,
   logCollapsed: false,
   lang: "auto",
+  watched: [],
+  watchedOnly: false,
 };
 
 /** 读取持久化配置（缺失 / 损坏时回落到默认值）
@@ -132,6 +138,8 @@ export function useAppStore() {
     customDir,
     clearCache,
     restartExplorer,
+    watched,
+    watchedOnly,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -278,9 +286,12 @@ export function useAppStore() {
   // ---------- 列表与选择 ----------
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (needle === "") return associations;
-    return associations.filter((a) => a.extension.toLowerCase().includes(needle));
-  }, [associations, search]);
+    const watchedSet = new Set(watched);
+    return associations.filter((assoc) => {
+      if (watchedOnly && !watchedSet.has(assoc.extension)) return false;
+      return needle === "" || assoc.extension.toLowerCase().includes(needle);
+    });
+  }, [associations, search, watched, watchedOnly]);
 
   const toggle = useCallback((ext: string) => {
     setSelected((prev) => {
@@ -305,6 +316,54 @@ export function useAppStore() {
   }, [visible]);
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  // ---------- 关注列表（关联扩展名）----------
+  /** 批量加入关注（自动去重排序） */
+  const addWatched = useCallback((list: string[]) => {
+    setConfig((prev) => {
+      const merged = new Set(prev.watched);
+      list.forEach((ext) => merged.add(ext));
+      return { ...prev, watched: [...merged].sort() };
+    });
+  }, []);
+
+  /** 勾选 / 取消关注 */
+  const toggleWatched = useCallback((ext: string) => {
+    setConfig((prev) => {
+      const next = new Set(prev.watched);
+      if (!next.delete(ext)) next.add(ext);
+      return { ...prev, watched: [...next].sort() };
+    });
+  }, []);
+
+  const clearWatched = useCallback(() => {
+    setConfig((prev) => ({ ...prev, watched: [] }));
+  }, []);
+
+  /** 为关注列表中的扩展名建立 Zed 关联（改变打开方式，需先经确认对话框） */
+  const registerWatched = useCallback(async () => {
+    const list = watched;
+    if (list.length === 0) {
+      push("warn", t("toast.noExtensions"));
+      return;
+    }
+    if (!zedPath) {
+      fail("fail.applyNoZed.title", new Error(t("fail.applyNoZed")));
+      return;
+    }
+    setBusy(true);
+    setProgress({ current: 0, total: list.length, extension: "" });
+    try {
+      appendLogs(await api.registerExtensions(channel, list, zedPath));
+      succeed(t("watch.registered", [list.length]));
+    } catch (err) {
+      fail("fail.register", err);
+    } finally {
+      setBusy(false);
+      setProgress(null);
+      await load(channel);
+    }
+  }, [appendLogs, channel, fail, load, push, succeed, watched, zedPath]);
 
   const selectedList = useMemo(
     () => associations.filter((a) => selected.has(a.extension)),
@@ -646,8 +705,9 @@ export function useAppStore() {
     if (kind === "remove") void removeSelected();
     else if (kind === "refresh") void runRefresh();
     else if (kind === "undo") void runUndo();
+    else if (kind === "register") void registerWatched();
     else if (kind === "quit") void api.confirmQuit();
-  }, [dialog, removeSelected, runRefresh, runUndo]);
+  }, [dialog, registerWatched, removeSelected, runRefresh, runUndo]);
 
   const copyLogs = useCallback(async () => {
     try {
@@ -706,6 +766,8 @@ export function useAppStore() {
     customDir,
     clearCache,
     restartExplorer,
+    watched,
+    watchedOnly,
     perExtension,
     sidebarWidth,
     logHeight,
@@ -733,6 +795,11 @@ export function useAppStore() {
     selectAllVisible,
     invertVisible,
     clearSelection,
+    addWatched,
+    toggleWatched,
+    clearWatched,
+    registerWatched,
+    setWatchedOnly: (value: boolean) => patchConfig({ watchedOnly: value }),
     applySelected,
     applyAll,
     removeSelected,

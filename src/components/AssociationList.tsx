@@ -4,7 +4,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Association } from "../api";
 import { describeIcon, renderIconDescription } from "../lib/iconInfo";
 import { t } from "../lib/i18n";
-import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, Spinner } from "./ui";
+import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, IconStar, Spinner } from "./ui";
 
 export function AssociationList({
   items,
@@ -16,6 +16,8 @@ export function AssociationList({
   exeName,
   perExtension,
   previews,
+  watched,
+  watchedOnly,
   onSearch,
   onToggle,
   onSelectAll,
@@ -24,6 +26,7 @@ export function AssociationList({
   onPickIcon,
   onClearIcon,
   onRowMenu,
+  onToggleWatchedOnly,
 }: {
   items: Association[];
   total: number;
@@ -35,6 +38,9 @@ export function AssociationList({
   perExtension: Record<string, string>;
   /** DefaultIcon 值 → PNG data URL（未加载为 undefined，渲染失败为 null） */
   previews: Record<string, string | null>;
+  /** 关注列表（设置页维护） */
+  watched: string[];
+  watchedOnly: boolean;
   onSearch: (value: string) => void;
   onToggle: (ext: string) => void;
   onSelectAll: () => void;
@@ -43,6 +49,7 @@ export function AssociationList({
   onPickIcon: (ext: string) => void;
   onClearIcon: (ext: string) => void;
   onRowMenu: (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => void;
+  onToggleWatchedOnly: () => void;
 }) {
   return (
     <aside className="sidebar">
@@ -66,6 +73,23 @@ export function AssociationList({
         ) : null}
       </div>
 
+      {/* 关注项筛选：只看关注列表里的扩展名 */}
+      <div className="list-filter">
+        <button
+          type="button"
+          className={`filter-chip${watchedOnly ? " filter-chip--on" : ""}`}
+          data-tip={t("watch.only")}
+          aria-pressed={watchedOnly}
+          onClick={onToggleWatchedOnly}
+        >
+          <IconStar size={11} />
+          {t("watch.mark")}
+        </button>
+        {watched.length > 0 ? (
+          <span className="counter counter--weak">{watched.length}</span>
+        ) : null}
+      </div>
+
       <div className="list" role="listbox" aria-multiselectable aria-label={t("list.aria")}>
         {items.length > 0 ? (
           items.map((assoc) => (
@@ -76,6 +100,7 @@ export function AssociationList({
               exeName={exeName}
               perIcon={perExtension[assoc.extension]}
               preview={assoc.currentIcon ? previews[assoc.currentIcon] : null}
+              watched={watched.includes(assoc.extension)}
               onToggle={onToggle}
               onPickIcon={onPickIcon}
               onClearIcon={onClearIcon}
@@ -126,6 +151,7 @@ function Row({
   exeName,
   perIcon,
   preview,
+  watched,
   onToggle,
   onPickIcon,
   onClearIcon,
@@ -137,6 +163,8 @@ function Row({
   perIcon?: string;
   /** PNG data URL；undefined = 未加载，null = 渲染失败 */
   preview?: string | null;
+  /** 是否在关注列表中（设置页维护） */
+  watched: boolean;
   onToggle: (ext: string) => void;
   onPickIcon: (ext: string) => void;
   onClearIcon: (ext: string) => void;
@@ -187,6 +215,11 @@ function Row({
 
         <span className="row__ext">.{assoc.extension}</span>
         <span className="row__tags">
+          {watched ? (
+            <span className="tag tag--info" title={t("watch.mark.tip")}>
+              <IconStar size={9} />
+            </span>
+          ) : null}
           {assoc.iconState === "missing" ? (
             <span className="tag tag--danger" data-tip={detail}>
               {t("row.tag.missing")}

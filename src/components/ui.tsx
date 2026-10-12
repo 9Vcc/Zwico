@@ -245,6 +245,13 @@ export const IconPlus = ({ size }: IconProps) => (
   </Svg>
 );
 
+/** 关注（星标） */
+export const IconStar = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M8 2.4 L9.7 6.2 L13.6 6.6 L10.7 9.3 L11.5 13.2 L8 11.2 L4.5 13.2 L5.3 9.3 L2.4 6.6 L6.3 6.2 Z" />
+  </Svg>
+);
+
 /** 设置（齿轮：外圆 + 8 条短齿 + 中心孔） */
 export const IconGear = ({ size }: IconProps) => (
   <Svg size={size}>

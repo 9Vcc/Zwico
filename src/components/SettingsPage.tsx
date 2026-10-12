@@ -3,21 +3,40 @@
 // 分组：外观与布局（含语言）/ Zed 安装 / 刷新行为 / 配置与数据 / 快捷键 / 关于
 // 全部文案走 i18n（t()），语言切换后随 store.lang 变化重渲染。
 
+import { useState } from "react";
+
 import { APP_VERSION, CHANNELS, type ZedInstallation } from "../api";
 import { baseName } from "../lib/iconInfo";
 import { t, type LangPref } from "../lib/i18n";
 import { Select } from "./Select";
 import {
   Card,
+  IconAlert,
   IconBack,
   IconDownload,
+  IconCheck,
   IconFolder,
+  IconPlus,
   IconSearch,
   IconUpload,
   Pill,
   Spinner,
   Switch,
 } from "./ui";
+
+/** 预置常用扩展名（按用途分组，供用户直接勾选） */
+const PRESET_GROUPS: { key: string; exts: string[] }[] = [
+  {
+    key: "code",
+    exts: ["py", "rs", "go", "js", "ts", "tsx", "jsx", "vue", "java", "c", "cpp", "h", "cs", "rb", "php", "swift", "kt", "lua", "sh", "sql"],
+  },
+  { key: "config", exts: ["json", "yaml", "yml", "toml", "ini", "conf", "env", "xml"] },
+  { key: "doc", exts: ["md", "txt", "rst", "tex", "csv", "log"] },
+  { key: "web", exts: ["html", "htm", "css", "scss", "less", "svelte"] },
+];
+
+/** 扩展名合法性（与后端 register::is_valid_extension 保持一致） */
+const EXT_PATTERN = /^[a-z0-9_+-]{1,32}$/;
 
 const SHORTCUTS: { keys: string; actionKey: string }[] = [
   { keys: "Ctrl + A", actionKey: "shortcut.selectAll" },
@@ -40,6 +59,7 @@ export function SettingsPage({
   scanning,
   perExtensionCount,
   customDir,
+  watched,
   viewport,
   onBack,
   onThemeChange,
@@ -54,6 +74,10 @@ export function SettingsPage({
   onUseInstallation,
   onExportPreset,
   onImportPreset,
+  onToggleWatched,
+  onAddWatched,
+  onClearWatched,
+  onRegisterWatched,
 }: {
   theme: "dark" | "light";
   lang: LangPref;
@@ -67,6 +91,8 @@ export function SettingsPage({
   scanning: boolean;
   perExtensionCount: number;
   customDir: string;
+  /** 关注列表：常用扩展名 */
+  watched: string[];
   /** 当前窗口与面板尺寸（排查布局问题时便于核对） */
   viewport: { width: number; height: number };
   onBack: () => void;
@@ -82,7 +108,29 @@ export function SettingsPage({
   onUseInstallation: (path: string) => void;
   onExportPreset: () => void;
   onImportPreset: () => void;
+  onToggleWatched: (ext: string) => void;
+  onAddWatched: (exts: string[]) => void;
+  onClearWatched: () => void;
+  onRegisterWatched: () => void;
 }) {
+  const [customInput, setCustomInput] = useState("");
+  const [customHint, setCustomHint] = useState("");
+
+  /** 添加自定义扩展名：支持逗号/空格分隔，非法项单独提示 */
+  const addCustom = () => {
+    const parts = customInput
+      .split(/[\s,，;；]+/)
+      .map((item) => item.trim().replace(/^\./, "").toLowerCase())
+      .filter((item) => item !== "");
+    const valid = [...new Set(parts.filter((item) => EXT_PATTERN.test(item)))];
+    const invalid = parts.filter((item) => !EXT_PATTERN.test(item));
+    if (valid.length > 0) onAddWatched(valid);
+    setCustomHint(
+      invalid.length > 0 ? t("watch.invalid", [invalid.length, invalid.join(", ")]) : "",
+    );
+    setCustomInput("");
+  };
+
   return (
     <div className="settings">
       <div className="settings__head">
@@ -240,6 +288,87 @@ export function SettingsPage({
               label={t("settings.restartExplorer")}
               title={t("settings.restartExplorer.tip")}
             />
+          </Card>
+
+          <Card title={t("settings.watch")} hint={t("settings.watch.hint")}>
+            <div className="row-btns">
+              <input
+                className="input"
+                placeholder={t("watch.custom.placeholder")}
+                value={customInput}
+                onChange={(event) => setCustomInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") addCustom();
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn--mini"
+                disabled={customInput.trim() === ""}
+                onClick={addCustom}
+              >
+                {t("watch.add")}
+              </button>
+            </div>
+            {customHint !== "" ? <p className="card__note">{customHint}</p> : null}
+
+            {PRESET_GROUPS.map((group) => (
+              <div className="watch-group" key={group.key}>
+                <div className="watch-group__head">
+                  <span className="field__label">{t(`watch.preset.${group.key}`)}</span>
+                  <button
+                    type="button"
+                    className="btn btn--mini"
+                    data-tip={t("watch.selectGroup")}
+                    onClick={() => onAddWatched(group.exts)}
+                  >
+                    <IconPlus size={11} />
+                  </button>
+                </div>
+                <div className="ext-grid">
+                  {group.exts.map((ext) => (
+                    <button
+                      key={ext}
+                      type="button"
+                      className={`ext-chip${watched.includes(ext) ? " ext-chip--on" : ""}`}
+                      aria-pressed={watched.includes(ext)}
+                      onClick={() => onToggleWatched(ext)}
+                    >
+                      {ext}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="settings__row">
+              <span className="counter">{t("watch.selected", [watched.length])}</span>
+              <div className="seg">
+                <button
+                  type="button"
+                  className="btn btn--mini"
+                  disabled={watched.length === 0}
+                  onClick={onClearWatched}
+                >
+                  {t("watch.clear")}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn--primary btn--wide"
+              disabled={watched.length === 0}
+              data-tip={t("watch.register.tip")}
+              onClick={onRegisterWatched}
+            >
+              <IconCheck size={14} />
+              {t("watch.register", [watched.length])}
+            </button>
+            <p className="inline-warn">
+              <IconAlert size={13} />
+              {t("watch.register.warn")}
+            </p>
           </Card>
         </div>
 

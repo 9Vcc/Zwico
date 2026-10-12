@@ -27,6 +27,12 @@ const DIALOG_TEXT: Record<
     confirm: "dialog.undo.confirm",
     danger: false,
   },
+  register: {
+    title: "dialog.register.title",
+    message: "dialog.register.message",
+    confirm: "dialog.register.confirm",
+    danger: true,
+  },
   quit: {
     title: "dialog.quit.title",
     message: "dialog.quit.message",

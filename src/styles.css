@@ -1958,6 +1958,85 @@ kbd {
   color: var(--text-weak);
 }
 
+/* ===== 关注列表（设置页）与列表筛选 ===== */
+
+.watch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.watch-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ext-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ext-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.ext-chip:hover {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.ext-chip--on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 列表上方的关注项筛选 */
+.list-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 4px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.filter-chip:hover {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.filter-chip--on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 /* ===== 窄窗口适配 ===== */
 
 @media (max-width: 1080px) {

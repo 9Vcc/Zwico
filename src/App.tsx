@@ -233,6 +233,7 @@ export default function App() {
           scanning={store.scanning}
           perExtensionCount={Object.keys(store.perExtension).length}
           customDir={store.customDir}
+          watched={store.watched}
           viewport={viewport}
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
@@ -247,6 +248,10 @@ export default function App() {
           onUseInstallation={store.useInstallation}
           onExportPreset={() => void store.exportPreset()}
           onImportPreset={() => void store.importPreset()}
+          onToggleWatched={store.toggleWatched}
+          onAddWatched={store.addWatched}
+          onClearWatched={store.clearWatched}
+          onRegisterWatched={() => store.setDialog("register")}
         />
       ) : (
       <div className="main">
@@ -260,6 +265,8 @@ export default function App() {
           exeName={channelExeName(store.channel)}
           perExtension={store.perExtension}
           previews={store.iconPreviews}
+          watched={store.watched}
+          watchedOnly={store.watchedOnly}
           onSearch={store.setSearch}
           onToggle={store.toggle}
           onSelectAll={store.selectAllVisible}
@@ -268,6 +275,7 @@ export default function App() {
           onPickIcon={(ext) => void store.pickIconFor(ext)}
           onClearIcon={store.clearIconFor}
           onRowMenu={openRowMenu}
+          onToggleWatchedOnly={() => store.setWatchedOnly(!store.watchedOnly)}
         />
 
         <div
