@@ -342,23 +342,6 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
   - 提供 `open_default_apps_settings` 一键打开系统「默认应用」页 —— 那是唯一官方支持、能真正改变默认打开方式的途径（Windows 11 支持按应用批量设置）。
 - 已评估但暂不做：自行实现 Hash 算法（MD5 + `NtSetInformationKey` 设置键的 LastWriteTime）直接改写 UserChoice。技术上可行（第三方工具如 SetUserFTA 长期使用），但风险高（写错会破坏用户既有选择）、且需要未文档化 API，属于需要用户明确决策的事项。
 
-### D37 · 「设为默认打开方式」= 删除 UserChoice（而非改写它）
-
-**需求**："不打开 Windows 设置，直接在工具里把 Zed 设为默认打开方式"。
-
-**做法**：删除 `FileExts\<ext>\UserChoice` 子键。Windows 的解析顺序是
-`UserChoice` → `Classes\<ext>` 默认值，删掉前者即回退到后者（本工具写入的 Zed）。
-
-**为什么不用"改写"**：改写需要重算 Hash（用户 SID + 扩展名 + ProgID + 键的 LastWriteTime）
-并用未文档化的 `NtSetInformationKey` 写回 LastWriteTime；写错会被系统忽略甚至重置。
-删除方案不需要 Hash、不需要未文档化 API，且 Windows 不会自动重建该键。
-
-**安全边界**（这是本工具唯一"删除系统键"的操作）：
-- **不可逆**：原 UserChoice 删掉后无法还原（重写需要 Hash），所以必须由用户在设置页显式确认，日志会逐个告知原默认程序，便于手动改回；
-- **只在 `Classes\<ext>` 已指向本通道时才删** —— 若该扩展名被其他程序占用，删掉 UserChoice 等于把它变成"无关联"，属越权，因此直接跳过；
-- 删除能力收口在 `registry::remove_absolute_tree`（绝对路径键树，幂等），错误上下文仍只写一次；`association::clear_user_choice` 是唯一的调用点。
-- 对 AGENTS 硬约束 2 的影响：约束从"UserChoice 只读"改为"**不写它的值**（只读 ProgId）；唯一允许的例外是删除整个子键"。
-
 ---
 
 ## 5. 已知限制
