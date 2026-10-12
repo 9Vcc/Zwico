@@ -20,6 +20,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
+use serde::Serialize;
 use windows_registry::CURRENT_USER;
 
 use crate::icon::{self, IconState};
@@ -29,6 +30,22 @@ use crate::zed::Channel;
 /// HKCU 下 Explorer 文件扩展名配置的根路径（UserChoice 所在）
 const FILE_EXTS_ROOT: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts";
 
+/// 生效 ProgID 的来源 —— 决定「关联是否真的生效」
+///
+/// Windows 双击文件时的优先级：`UserChoice` → `Classes\<ext>` 默认值，
+/// 其中 `UserChoice` 受完整性保护（含 Hash），程序不能可靠改写，
+/// 因此本工具写下的关联在它存在时不生效。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProgIdSource {
+    /// 来自 `FileExts\<ext>\UserChoice`：Explorer 实际使用，程序无法改写
+    UserChoice,
+    /// 来自 `Classes\<ext>` 默认值：本工具可写
+    ClassesDefault,
+    /// 来自通道自有 ProgID 键（该扩展名尚未设为默认打开方式）
+    ProgIdOnly,
+}
+
 /// 单个文件关联的描述信息
 #[derive(Debug, Clone)]
 pub struct FileAssociation {
@@ -36,6 +53,8 @@ pub struct FileAssociation {
     pub extension: String,
     /// 实际生效的 ProgID（如 "ZedG.md"、"Applications\ZedG.exe"、"md_auto_file"）
     pub prog_id: String,
+    /// 该 ProgID 的来源（UserChoice / Classes 默认值 / 仅 ProgID 键）
+    pub prog_id_source: ProgIdSource,
     /// ProgID 是否为跨扩展名共享（`Applications\*` 形态：
     /// 所有通过「打开方式」关联到同一程序的扩展名共用图标）
     pub shared_prog_id: bool,
@@ -75,7 +94,7 @@ pub fn list_associations(channel: Channel) -> Result<Vec<FileAssociation>> {
         if !known.insert(extension.clone()) {
             continue; // 源 A 已收录（实际生效），跳过
         }
-        associations.push(build_association(&extension, prog_id));
+        associations.push(build_association(&extension, prog_id, ProgIdSource::ProgIdOnly));
     }
 
     // 按扩展名排序，保证列表顺序稳定
@@ -132,14 +151,14 @@ fn list_effective_associations(channel: Channel, classes: &[String]) -> Vec<File
         let extension = raw_extension.to_ascii_lowercase();
 
         // 解析实际生效的 ProgID（UserChoice 优先，扩展名键默认值后备）
-        let Some(prog_id) = effective_prog_id(key_name) else {
+        let Some((prog_id, source)) = effective_prog_id(key_name) else {
             continue;
         };
         if !channel.owns_prog_id(&prog_id) {
             continue;
         }
 
-        result.push(build_association(&extension, &prog_id));
+        result.push(build_association(&extension, &prog_id, source));
     }
 
     result
@@ -152,20 +171,64 @@ fn list_effective_associations(channel: Channel, classes: &[String]) -> Vec<File
 ///
 /// 注意：注册表路径大小写不敏感，`ext_key` 使用原始键名即可命中
 /// `FileExts` 下大小写不同名的子键。
-fn effective_prog_id(ext_key: &str) -> Option<String> {
-    // 1. UserChoice
-    let user_choice = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
-    if let Ok(key) = CURRENT_USER.open(&user_choice) {
-        if let Ok(prog_id) = key.get_string("ProgId") {
-            return Some(prog_id);
-        }
+fn effective_prog_id(ext_key: &str) -> Option<(String, ProgIdSource)> {
+    // 1. UserChoice：Explorer 双击时实际使用，且受完整性保护（只读）
+    if let Some(prog_id) = read_user_choice(ext_key) {
+        return Some((prog_id, ProgIdSource::UserChoice));
     }
-    // 2. Classes\<ext> 默认值
-    registry::get_default_value(ext_key).ok().flatten()
+    // 2. Classes\<ext> 默认值：仅在 UserChoice 不存在时生效
+    registry::get_default_value(ext_key)
+        .ok()
+        .flatten()
+        .map(|prog_id| (prog_id, ProgIdSource::ClassesDefault))
+}
+
+/// 读取 `FileExts\<ext>\UserChoice` 的 ProgId（只读；该键受保护不能改写）
+fn read_user_choice(ext_key: &str) -> Option<String> {
+    let path = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
+    CURRENT_USER.open(path).ok()?.get_string("ProgId").ok()
+}
+
+/// 单个扩展名的关联状态（供设置页诊断「为什么关联没生效」）
+#[derive(Debug, Clone)]
+pub struct ExtStatus {
+    pub extension: String,
+    /// 实际生效的 ProgID（UserChoice 优先，其次 Classes 默认值）
+    pub effective_prog_id: Option<String>,
+    /// 实际生效的关联是否指向本通道 Zed
+    pub effective_is_zed: bool,
+    /// `UserChoice` 是否存在 —— 存在即表示系统已指定默认程序，本工具写入的关联不会生效
+    pub has_user_choice: bool,
+    /// `Classes\<ext>` 默认值是否已指向本通道
+    pub classes_registered: bool,
+}
+
+/// 检查单个扩展名：谁在实际生效、注册的关联是否被 UserChoice 挡住
+pub fn inspect_extension(channel: Channel, extension: &str) -> ExtStatus {
+    let ext = extension.trim().trim_start_matches('.').to_ascii_lowercase();
+    let ext_key = format!(".{ext}");
+
+    let user_choice = read_user_choice(&ext_key);
+    let classes_default = registry::get_default_value(&ext_key).ok().flatten();
+    let effective = user_choice.clone().or_else(|| classes_default.clone());
+
+    ExtStatus {
+        effective_is_zed: effective
+            .as_deref()
+            .map(|prog_id| channel.owns_prog_id(prog_id))
+            .unwrap_or(false),
+        classes_registered: classes_default
+            .as_deref()
+            .map(|prog_id| channel.owns_prog_id(prog_id))
+            .unwrap_or(false),
+        has_user_choice: user_choice.is_some(),
+        effective_prog_id: effective,
+        extension: ext,
+    }
 }
 
 /// 构造关联条目：读取 ProgID 的 DefaultIcon 状态（尽力而为，失败按未设置处理）
-fn build_association(extension: &str, prog_id: &str) -> FileAssociation {
+fn build_association(extension: &str, prog_id: &str, source: ProgIdSource) -> FileAssociation {
     let icon_key = format!("{prog_id}\\DefaultIcon");
     let has_default_icon = registry::key_exists(&icon_key).unwrap_or(false);
     let current_icon = registry::get_default_value(&icon_key).ok().flatten();
@@ -177,6 +240,7 @@ fn build_association(extension: &str, prog_id: &str) -> FileAssociation {
     FileAssociation {
         extension: extension.to_string(),
         prog_id: prog_id.to_string(),
+        prog_id_source: source,
         shared_prog_id: prog_id.starts_with("Applications\\"),
         shared_with: Vec::new(), // 由 list_associations 统一回填
         has_default_icon,
@@ -192,11 +256,11 @@ mod tests {
     /// 关联条目构造：共享形态识别与失效判定
     #[test]
     fn association_shape() {
-        let shared = build_association("md", r"Applications\ZedG.exe");
+        let shared = build_association("md", r"Applications\ZedG.exe", ProgIdSource::UserChoice);
         assert!(shared.shared_prog_id);
         assert!(!shared.has_default_icon || shared.current_icon.is_some());
 
-        let per_ext = build_association("rs", "Zed.rs");
+        let per_ext = build_association("rs", "Zed.rs", ProgIdSource::ClassesDefault);
         assert!(!per_ext.shared_prog_id);
         assert_eq!(per_ext.extension, "rs");
     }

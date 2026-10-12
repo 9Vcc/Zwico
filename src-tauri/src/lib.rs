@@ -27,6 +27,7 @@ mod registry;
 mod text;
 mod zed;
 
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -114,6 +115,8 @@ fn error_p(key: &str, params: Vec<String>) -> LogLineDto {
 struct AssociationDto {
     extension: String,
     prog_id: String,
+    /// "userChoice" | "classesDefault" | "progIdOnly"
+    prog_id_source: association::ProgIdSource,
     shared_prog_id: bool,
     /// 同一 ProgID 还被哪些扩展名共用（影响面量化）
     shared_with: Vec<String>,
@@ -128,6 +131,7 @@ impl From<FileAssociation> for AssociationDto {
         Self {
             extension: a.extension,
             prog_id: a.prog_id,
+            prog_id_source: a.prog_id_source,
             shared_prog_id: a.shared_prog_id,
             shared_with: a.shared_with,
             has_default_icon: a.has_default_icon,
@@ -189,6 +193,17 @@ impl From<TargetDto> for IconTarget {
     }
 }
 
+/// 单个扩展名的关联状态（设置页诊断用）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtStatusDto {
+    extension: String,
+    effective_prog_id: Option<String>,
+    effective_is_zed: bool,
+    has_user_choice: bool,
+    classes_registered: bool,
+}
+
 /// 自动扫描到的 Zed 安装（前端列表用）
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -229,6 +244,9 @@ struct UndoStatusDto {
     action: Option<String>,
     count: usize,
 }
+
+/// 子进程创建标志：不弹出控制台窗口
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// 撤销快照文件名（保存在应用数据目录）
 const UNDO_FILE: &str = "undo.json";/// 在阻塞池执行闭包，统一处理 join 失败
@@ -934,6 +952,52 @@ async fn register_extensions(
     .await
 }
 
+/// 检查一批扩展名的关联状态（只读）
+///
+/// 用于回答「为什么注册了关联却没生效」：`UserChoice` 存在且指向其他程序时，
+/// 写入 `Classes\<ext>` 的关联不会生效。
+#[tauri::command]
+async fn inspect_extensions(
+    channel: String,
+    extensions: Vec<String>,
+) -> Result<Vec<ExtStatusDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
+    blocking(move || {
+        Ok(extensions
+            .iter()
+            .map(|ext| {
+                let status = association::inspect_extension(channel, ext);
+                ExtStatusDto {
+                    extension: status.extension,
+                    effective_prog_id: status.effective_prog_id,
+                    effective_is_zed: status.effective_is_zed,
+                    has_user_choice: status.has_user_choice,
+                    classes_registered: status.classes_registered,
+                }
+            })
+            .collect())
+    })
+    .await
+}
+
+/// 打开 Windows 的「默认应用」设置页
+///
+/// 为什么不直接写 `UserChoice`：该键带 Hash 完整性保护，写错会被系统忽略甚至重置，
+/// 系统设置页是唯一官方支持、且能真正改变默认打开方式的途径。
+#[tauri::command]
+async fn open_default_apps_settings() -> Result<(), String> {
+    blocking(move || {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "ms-settings:defaultapps"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| encoded("back.openSettingsFailed", &[err.to_string()]))
+    })
+    .await
+}
+
 /// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
 #[tauri::command]
 fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
@@ -1002,6 +1066,8 @@ pub fn run() {
             apply_icons,
             remove_icons,
             register_extensions,
+            inspect_extensions,
+            open_default_apps_settings,
             refresh_explorer,
             undo_status,
             undo_last,
