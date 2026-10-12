@@ -163,7 +163,7 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 |---|---|
 | 变量 | 深 / 浅两套：背景四级、描边两级、语义色（含 `-soft` / `-border`）、字体、圆角、`--sidebar-w` / `--log-h` |
 | 基础 | reset、滚动条、`@keyframes`（spin / fade-in / slide-in / progress-slide）、`prefers-reduced-motion` |
-| 布局 | `.app` 三行 grid、`.main` 三列、`.content-area`（进度/提示条）+ `.content-scroll`（滚动）+ `.content`（多列瀑布流）、`.resizer`（竖向/横向） |
+| 布局 | `.app` 三行 grid、`.main` 三列、`.content-area`（进度/提示条）+ `.content-scroll`（滚动）+ `.content`/`.content__col`（显式两列卡片）、`.resizer`（竖向/横向） |
 | 组件 | topbar→titlebar / brand / 表单 / 按钮（primary·danger·attention·tool·icon·mini·tiny）/ card（含 divider）/ field / path / option / switch / dropdown / tooltip / pill·tag / sidebar·row（含图标预览）/ empty / progress·banner / preset / logpanel / dialog / svg-ico / toasts / spinner |
 | 响应式 | `≤1080px` 收紧卡片；`≤900px` 单列 + 侧栏收窄 + 隐藏拖拽条；高度 `≤620px` 日志再收 |
 
