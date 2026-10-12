@@ -356,6 +356,24 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 
 **实现要点**：`RegisteredApplications` 与 `Capabilities` 不在 `Software\Classes` 下，因此 `registry.rs` 新增了一批 **HKCU 根相对路径** 的通用函数（`set_named_value` / `get_named_value` / `remove_named_value` / `value_names` / `delete_key_tree`），与 Classes 前缀版并存；`windows_registry` 的 `values()` 迭代器直接产出 `(String, Value)`，没有 `Result` 包装（与 `keys()` 不同，容易踩）。
 
+### D39 · 托盘常驻、开机自启动、状态同步策略
+
+**托盘常驻**（tauri `tray-icon` feature）：
+
+- 解析顺序被有意反转：**关闭窗口/Alt+F4 = 隐藏到托盘**（`CloseRequested` 无条件 `prevent_close` + `hide`），自绘标题栏的关闭按钮（`window_close` 命令）同样改为隐藏 —— 任务在后台继续跑；
+- 退出只能通过托盘菜单「退出」（`app.exit(0)`）；busy 时点退出会**拉回主窗口**让用户看到任务进度，而不是静默打断；
+- 旧的「busy 时拦截关闭 → 弹确认框 → confirm_quit」流程整体移除：关闭已不再是退出，确认失去意义；
+- 托盘菜单文案硬编码中文 —— 托盘属系统级 UI，跟随前端语言需要跨层同步，暂缓（TODO）。
+
+**开机自启动**（tauri-plugin-autostart）：
+
+- 状态同步策略：**以系统为准，不存应用配置**。启动时查询插件（读 Windows 启动项），开关切换即调 `enable()/disable()` —— 避免「配置说开、系统说关」的不同步；
+- 插件写入当前用户启动项（HKCU），无需管理员。
+
+**两个实现坑**（同为易错点）：
+- 关闭行为的两处入口（`CloseRequested` 事件与 `window_close` 命令）必须一致，改一处漏一处就会出现「点了 X 进程还在」的假象；
+- 前端的 `onCloseRequested` 监听与 Rust 的 `prevent_close` 会**同时收到**关闭请求，若 Rust 已决定隐藏，前端的确认框逻辑必须移除，否则弹窗与隐藏抢戏。
+
 ---
 
 ## 5. 已知限制
