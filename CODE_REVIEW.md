@@ -181,6 +181,16 @@
 
 ---
 
+## 0.13 第十三轮：共享 ProgID 图标串台修复（2026-10-12 晚）
+
+实测：.yaml 与 .gitignore 图标互相影响。根因：「打开方式 → 始终」把 UserChoice.ProgId 统一指向 `Applications\<exe>`（跨扩展名共享，DefaultIcon 唯一），而图标应用写的是实际生效 ProgID（D2）。
+
+**修复**：`set_icon` 对 `Applications\` 形态不再写 DefaultIcon —— 图标写到独立的 `ZedG.<ext>` ProgID（含完整打开命令，为迁移铺路）；`BatchReport.migrated` 记录待迁移项并提示用户到系统设置重新设为默认。`apply_icons`/`batch_set_icons`/`set_icon` 传递 channel。
+
+**验证**：36 测试全绿、clippy 0 告警。
+
+---
+
 ## 1. 结构评估
 
 ### 1.1 做得好的部分

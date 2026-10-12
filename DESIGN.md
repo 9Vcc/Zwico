@@ -386,6 +386,25 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 
 **实现坑**：`windows_registry` 的 `values()` 迭代器产出 `(String, Value)` **无 Result 包装**（与 `keys()` 一致），但 `open` 默认只读 —— 上一轮的教训在本轮直接复用（所有写走 `create`）。
 
+### D41 · 共享 ProgID 的图标串台与独立 ProgID 迁移
+
+**实测暴露**：.yaml 与 .gitignore 的图标互相影响 —— 悬停显示「共享：修改图标会同时影响 gitignore.json」。
+
+**机制**：通过「打开方式 → 始终使用此应用」设置的扩展名，Windows 把
+`UserChoice.ProgId` 统一指向 **`Applications\<exe>`** —— 这个 ProgID 是**跨扩展名共享**的
+（所有走同一 exe 的"打开方式"条目共用），`DefaultIcon` 全局唯一。而 D2 的图标应用写的是
+「实际生效 ProgID」，于是 yaml.ico 被写到了共享 ProgID 上，所有共享扩展名一起变图。
+
+**修复（图标不再写共享 ProgID）**：`set_icon` 检测 `Applications\` 前缀 → 图标写到
+**按扩展名独立**的 `ZedG.<ext>` ProgID（完整结构：类型描述 + DefaultIcon + 打开命令），
+**完全跳过**对共享 ProgID 的 DefaultIcon 写入；`BatchReport.migrated` 记录这类扩展名，
+apply 汇总提示用户到系统设置重新设为默认。
+
+**生效路径**（Windows 机制决定，无法绕过 UserChoice）：
+- 「打开方式 → 始终」写的 `UserChoice.ProgId = Applications\<exe>` → 图标必然共享（列表里带「共享」标记的条目即此类）；
+- **系统设置页**按 Capabilities 的按扩展名 ProgID 写 UserChoice → `ZedG.<ext>` → 独立图标生效。应用注册（D38）已声明 FileAssociations，迁移路径已铺好。
+- 给用户的操作指引：系统「默认应用」→ 找到 ZedG → 对目标扩展名重新选择（或点"设为默认"批量设置）。
+
 ---
 
 ## 5. 已知限制
