@@ -1,5 +1,7 @@
 # Zwico
 
+简体中文 | [English](./README.en.md)
+
 **Zwico** = **Z**ed **Wi**ndows **Ico**n
 
 ## 解决什么问题
