@@ -27,6 +27,7 @@ RsIcon-tauri/
 │   │   ├── useSvgIco.ts              SVG 转 ICO 工具的状态与动作
 │   │   └── useToast.tsx              浮层提示（useToasts + ToastStack）
 │   ├── lib/
+│   │   ├── i18n.ts                   中英字典、t() / detectLang() / tEncoded()
 │   │   ├── iconInfo.ts               DefaultIcon 解析、图标来源推断、格式化
 │   │   ├── ico.ts                    SVG 光栅化与 ICO 打包
 │   │   ├── layout.ts                 侧栏/日志尺寸的边界约束
@@ -57,6 +58,7 @@ RsIcon-tauri/
 │       ├── zed.rs                    通道定义 + 安装探测 + 全量扫描 + 归属判定
 │       ├── association.rs            双源枚举 + 图标状态 + 共享影响面
 │       ├── icon.rs                   图标取值 / 批量设置删除 / 失效判定
+│       ├── text.rs                   「key + 参数」编码（前端 tEncoded 还原）
 │       ├── iconrender.rs             图标渲染 PNG（GDI，第二处 unsafe 模块）
 │       └── refresh.rs                通知 Shell / 清缓存 / 重启 explorer
 └── target/                           cargo 产物 + ui-check（校验脚本，gitignore）
