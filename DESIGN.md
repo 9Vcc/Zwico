@@ -405,6 +405,21 @@ apply 汇总提示用户到系统设置重新设为默认。
 - **系统设置页**按 Capabilities 的按扩展名 ProgID 写 UserChoice → `ZedG.<ext>` → 独立图标生效。应用注册（D38）已声明 FileAssociations，迁移路径已铺好。
 - 给用户的操作指引：系统「默认应用」→ 找到 ZedG → 对目标扩展名重新选择（或点"设为默认"批量设置）。
 
+### D42 · 单实例保护（tauri-plugin-single-instance）
+
+**问题**：应用关闭窗口后隐藏到托盘常驻（D39），但 Tauri 默认不限制实例数 ——
+后台常驻时再次双击桌面快捷方式会启动全新进程，任务栏出现多个 Zwico 条目。
+
+**方案**：官方插件 `tauri-plugin-single-instance`。首个实例启动时持有按应用标识
+命名的系统级单实例锁；后续进程在 builder 初始化阶段即检测到锁已被占用，执行回调后
+**直接退出**（不会创建窗口）。回调里复用 `show_main_window()` 把主窗口从托盘拉回
+前台（unminimize + show + set_focus）。
+
+**约束**：
+- 插件**必须第一个注册**（官方要求，晚于其他插件注册时锁初始化会晚于窗口创建）；
+- 插件无面向 JS 的 API，`capabilities/default.json` 无需加权限，也不引入 npm 依赖；
+- 回调收到的 `argv` / `cwd` 暂不使用，后续做「关联文件唤起并打开」时可在此接收参数。
+
 ---
 
 ## 5. 已知限制
@@ -412,7 +427,7 @@ apply 汇总提示用户到系统设置重新设为默认。
 | 限制 | 影响 | 位置 |
 |---|---|---|
 | `bundle.active = false` | 只产出 exe，不出 msi/nsis 安装包 | `tauri.conf.json` |
-| exe 图标为占位 | `app-icon.png`（1024 源图）可替换后 `pnpm tauri icon app-icon.png` 重生成 | README |
+| exe 图标已替换为新 logo | 2026-10-12 由 `public/logo.svg` 光栅化重生成；再次换图后跑 `pnpm tauri icon app-icon.png` | `app-icon.png` |
 | **界面交互未做真机验证** | 类型检查/构建/测试/类名校验均通过，但视觉与手感（无边框标题栏、拖拽、图标预览、SVG 工具）需跑一次 `pnpm tauri dev` 确认 | 2026-10-12 |
 | 无边框窗口的拖拽与最大化未实测 | 依据 tao 源码确认保留 `WS_SIZEBOX`（可缩放），但实际手感与 DWM 阴影/圆角需真机确认 | D22 |
 | 图标预览在高 DPI 下未验证 | 固定取 16×16；缩放比 >100% 时系统可能会选更大的图标源 | D23 |

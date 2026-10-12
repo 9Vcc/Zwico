@@ -1155,6 +1155,12 @@ async fn load_preset_file(path: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 单实例保护：必须第一个注册。二次启动（双击快捷方式 / 托盘失效时的
+        // 重复启动）会走到这里，把已有主窗口拉回前台，新进程随即退出。
+        // 官方文档要求该插件先于其他插件注册，否则锁初始化晚于窗口创建。
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
