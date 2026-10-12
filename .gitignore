@@ -1,6 +1,49 @@
-node_modules
-dist
-dist-ssr
+# ===== 依赖与构建产物 =====
+node_modules/
+dist/
+dist-ssr/
+target/
+
+# ===== 包管理器：统一使用 pnpm =====
+# 防止误用 npm / yarn 生成第二份锁文件
+package-lock.json
+yarn.lock
+pnpm-debug.log*
+
+# ===== 日志与临时文件 =====
+*.log
+*.tmp
+*.bak
 *.local
+
+# ===== 前端 / TS 编译中间产物 =====
+*.tsbuildinfo
+vite.config.ts.timestamp-*
+
+# ===== Rust 备份文件 =====
+*.rs.bk
+
+# ===== 编辑器与 IDE =====
+# 保留 extensions.json（推荐扩展可共享），其余本地配置不入库
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.iml
+
+# ===== 系统文件（本项目平台限定 Windows）=====
 .DS_Store
-target
+Thumbs.db
+Desktop.ini
+
+# ===== 环境变量 =====
+.env
+.env.*
+!.env.example
+
+# ===== 工具工作目录 =====
+# .workbuddy/ 存放本机 agent 的项目记忆与本地状态，不随仓库分发；
+# 项目级 skills 例外保留（团队共享）。
+.workbuddy/*
+!.workbuddy/skills/
+
+# 注：截图回归产物统一放在 target/ 下（已忽略），不要另建目录存放。
