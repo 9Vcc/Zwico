@@ -20,7 +20,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 
+use crate::register::prog_id_for;
 use crate::registry;
+use crate::zed::Channel;
 use crate::text::encoded_str;
 
 /// 图标操作目标：扩展名及其关联的 ProgID
@@ -86,6 +88,9 @@ pub struct BatchReport {
     pub applied: usize,
     /// 回退到系统图标的扩展名（自定义图标缺失）
     pub fell_back: Vec<String>,
+    /// 通过「打开方式」共享 ProgID（Applications\<exe>）关联的扩展名：
+    /// 图标已写入独立 ProgID，但需在系统设置里重新设为默认才生效
+    pub migrated: Vec<String>,
     /// 失败项：扩展名 + 原因
     pub failed: Vec<(String, String)>,
 }
@@ -345,6 +350,7 @@ pub fn set_icon(
     zed_path: &Path,
     custom_dir: Option<&Path>,
     generated_dir: Option<&Path>,
+    channel: Channel,
 ) -> Result<IconOutcome> {
     if !registry::key_exists(&target.prog_id)? {
         return Err(anyhow!("{}", encoded_str("back.progIdGone", &[&target.prog_id])));
@@ -359,6 +365,31 @@ pub fn set_icon(
         target.custom_icon.as_deref(),
         generated_dir,
     );
+
+    // **共享 ProgID 防串台**：`Applications\<exe>` 形态的 ProgID 被「打开方式 →
+    // 始终使用此应用」设置的所有扩展名共享，DefaultIcon 全局唯一 —— 在它上面
+    // 写扩展名专属图标会让所有共享扩展名一起变成同一张图（实测：.yaml 与
+    // .gitignore 串台）。
+    //
+    // 处理：图标写到**按扩展名独立**的 ProgID（`ZedG.<ext>`，含完整的打开命令），
+    // **不碰共享 ProgID**。用户在系统「默认应用」里重新设为默认后，UserChoice
+    // 会指向独立 ProgID，独立图标随即生效（系统设置页按 Capabilities 的
+    // 按扩展名 ProgID 写 UserChoice，与「打开方式」的 Applications 形态不同）。
+    if target.prog_id.starts_with("Applications\\") {
+        let independent = prog_id_for(channel, &extension);
+        let command = format!("\"{}\" \"%1\"", zed_path.display());
+        registry::set_default_value(&independent, &independent)?;
+        registry::set_default_value(&format!("{independent}\\DefaultIcon"), &outcome.value)?;
+        registry::set_default_value(
+            &format!("{independent}\\shell\\open\\command"),
+            &command,
+        )?;
+        println!(
+            "[图标] {} 使用共享 ProgID（{}）：独立图标已写入 {}，需在系统「默认应用」重新设为默认后生效",
+            extension, target.prog_id, independent
+        );
+        return Ok(outcome);
+    }
 
     registry::set_default_value(&format!("{}\\DefaultIcon", target.prog_id), &outcome.value)?;
     println!(
@@ -395,6 +426,7 @@ pub fn batch_set_icons(
     zed_path: &Path,
     custom_dir: Option<&Path>,
     generated_dir: Option<&Path>,
+    channel: Channel,
     progress_cb: impl Fn(&IconTarget, usize, usize),
 ) -> BatchReport {
     let total = targets.len();
@@ -405,7 +437,7 @@ pub fn batch_set_icons(
 
     for (index, target) in targets.iter().enumerate() {
         progress_cb(target, index, total);
-        match set_icon(target, mode, zed_path, custom_dir, generated_dir) {
+        match set_icon(target, mode, zed_path, custom_dir, generated_dir, channel) {
             Ok(outcome) => {
                 report.applied += 1;
                 if outcome.fell_back {
@@ -625,10 +657,12 @@ mod tests {
             total: 5,
             applied: 2,
             fell_back: vec!["py".into(), "ts".into()],
+            migrated: vec!["yaml".into()],
             failed: vec![("rs".into(), "ProgID key is gone".into())],
         };
         assert_eq!(report.applied, 2);
         assert_eq!(report.fell_back.len(), 2);
+        assert_eq!(report.migrated.len(), 1);
         assert_eq!(report.failed.len(), 1);
         assert_eq!(report.failed[0].0, "rs");
 
@@ -638,6 +672,7 @@ mod tests {
             ..Default::default()
         };
         assert!(clean.fell_back.is_empty());
+        assert!(clean.migrated.is_empty());
         assert!(clean.failed.is_empty());
     }
 }

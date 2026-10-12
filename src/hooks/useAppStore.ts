@@ -529,6 +529,7 @@ export function useAppStore() {
       ]);
       try {
         const lines = await api.applyIcons(
+          channel,
           targets,
           mode,
           zedPath ?? "",

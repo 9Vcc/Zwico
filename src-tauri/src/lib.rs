@@ -538,11 +538,14 @@ fn notify_log() -> LogLineDto {
 async fn apply_icons(
     window: tauri::Window,
     state: State<'_, AppState>,
+    channel: String,
     targets: Vec<TargetDto>,
     mode: String,
     zed_path: String,
     custom_dir: Option<String>,
 ) -> Result<Vec<LogLineDto>, String> {
+    let channel = Channel::from_key(&channel)
+        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
     let mode = match mode.as_str() {
         "system" => IconMode::System,
         "app" => IconMode::App,
@@ -579,7 +582,8 @@ async fn apply_icons(
             &zed,
             custom.as_deref(),
             generated.as_deref(),
-            |target, done, total| {
+            channel,
+            |target: &icon::IconTarget, done: usize, total: usize| {
                 if let Err(err) = window.emit(
                     "progress",
                     ProgressPayload {
@@ -601,6 +605,15 @@ async fn apply_icons(
                 vec![
                     report.fell_back.len().to_string(),
                     report.fell_back.join(", "),
+                ],
+            ));
+        }
+        if !report.migrated.is_empty() {
+            log.push(info_p(
+                "back.sharedMigrated",
+                vec![
+                    report.migrated.len().to_string(),
+                    report.migrated.join(", "),
                 ],
             ));
         }

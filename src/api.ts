@@ -120,8 +120,8 @@ export const api = {
   /** 把 DefaultIcon 值渲染成 PNG data URL（失败为 null） */
   previewIcon: (value: string, size = 16) =>
     invoke<string | null>("preview_icon", { value, size }),
-  applyIcons: (targets: Target[], mode: IconMode, zedPath: string, customDir: string | null) =>
-    invoke<LogLine[]>("apply_icons", { targets, mode, zedPath, customDir }),
+  applyIcons: (channel: ChannelKey, targets: Target[], mode: IconMode, zedPath: string, customDir: string | null) =>
+    invoke<LogLine[]>("apply_icons", { channel, targets, mode, zedPath, customDir }),
   removeIcons: (targets: Target[]) => invoke<LogLine[]>("remove_icons", { targets }),
   /** 为扩展名建立 Zed 关联（改变打开方式，需用户显式触发） */
   registerExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
