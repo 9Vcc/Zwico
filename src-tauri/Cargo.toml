@@ -1,0 +1,42 @@
+[package]
+name = "rsicon-tauri"
+version = "0.1.0"
+edition = "2021"
+# 最低支持的 Rust 版本（Tauri 2 要求 ≥ 1.77.2）
+rust-version = "1.77"
+description = "Zed 文件关联图标管理工具（Tauri 版）"
+
+[lib]
+# Tauri 约定：主逻辑放 lib，main.rs 只做入口
+name = "rsicon_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+# 原生文件 / 文件夹选择对话框（替代旧版的 rfd）
+tauri-plugin-dialog = "2"
+# 剪贴板（日志复制按钮）
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+# 轻量注册表封装：读写 HKCU 无需管理员权限
+windows-registry = "0.2"
+# windows-registry 的错误类型来源（用于按错误码判断「键/值不存在」）
+windows-result = "0.2"
+# Win32 API 绑定（Shell 刷新）
+windows = { version = "0.58", features = [
+    "Win32_UI_Shell",         # SHChangeNotify：修改关联后通知 Shell 刷新图标
+    "Win32_Foundation",       # 基础类型（HANDLE、WIN32_ERROR 等）
+    "Win32_System_Threading", # 线程/等待原语
+] }
+
+[profile.release]
+# 发布优化：以体积为优先（与旧版 egui 版一致）
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
