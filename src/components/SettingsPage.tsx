@@ -470,7 +470,7 @@ export function SettingsPage({
                   onClick={onRegisterApp}
                 >
                   <IconStar size={13} />
-                  {t("appReg.register", [watched.length])}
+                  {t("appReg.register")}
                 </button>
                 <button
                   type="button"
