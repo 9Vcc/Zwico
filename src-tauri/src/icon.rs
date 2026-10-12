@@ -11,7 +11,8 @@
 //! DefaultIcon 值的格式：`<图标文件路径>,<图标索引>`，
 //! 例如 `"C:\...\zed.exe",0` 或 `imageres.dll,-102`（负数表示资源 ID）。
 //!
-//! 自定义图标缺失时**一律回退系统图标**，并把回退项收进 [`BatchReport::fell_back`]
+//! 自定义图标缺失时优先回退目录内的 `default.ico`（用户放置的统一兜底图标），
+//! 仍缺失才回退系统图标，并把最终的回退项收进 [`BatchReport::fell_back`]
 //! 交给上层展示（release 下没有控制台，不能用 `println!` 代替用户可见反馈）。
 
 use std::path::{Path, PathBuf};
@@ -260,7 +261,9 @@ pub fn resolve_icon_value(
         },
 
         IconMode::Custom => {
-            // 查找自定义目录下的 <扩展名>.ico，找不到则回退系统图标
+            // 解析顺序：`<扩展名>.ico` → 目录内 `default.ico` → 系统图标。
+            // default.ico 命中视为正常生效（不记回退，也不写 note —— 这是用户
+// 主动放置的统一兜底图标，属预期行为而非异常）。
             match custom_dir {
                 Some(dir) => {
                     let ico = dir.join(format!("{extension}.ico"));
@@ -271,9 +274,18 @@ pub fn resolve_icon_value(
                             note: None,
                         }
                     } else {
-                        let mut outcome = system();
-                        outcome.note = Some(format!("图标目录中没有 {extension}.ico"));
-                        outcome
+                        let fallback = dir.join("default.ico");
+                        if fallback.is_file() {
+                            IconOutcome {
+                                value: quoted_icon(&fallback),
+                                fell_back: false,
+                                note: None,
+                            }
+                        } else {
+                            let mut outcome = system();
+                            outcome.note = Some(format!("图标目录中没有 {extension}.ico"));
+                            outcome
+                        }
                     }
                 }
                 None => {
@@ -506,6 +518,35 @@ mod tests {
         if system_dir().map(|d| d.join("imageres.dll").exists()) == Some(true) {
             assert_eq!(inspect_icon_value("imageres.dll,-102"), IconState::Valid);
         }
+    }
+
+    /// 自定义模式：`<扩展名>.ico` 缺失时回退目录内 `default.ico`，再缺失才回退系统
+    #[test]
+    fn custom_mode_falls_back_to_default_ico() {
+        let dir = std::env::temp_dir().join(format!("rsicon-default-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let default = dir.join("default.ico");
+        std::fs::write(&default, b"dummy-default").unwrap();
+
+        // py.ico 不存在 → 使用 default.ico（正常生效，不算回退）
+        let outcome =
+            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+        assert_eq!(outcome.value, quoted_icon(&default));
+        assert!(!outcome.fell_back);
+
+        // 有专属图标时优先专属
+        std::fs::write(dir.join("py.ico"), b"dummy-py").unwrap();
+        let outcome =
+            resolve_icon_value("py", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+        assert_eq!(outcome.value, quoted_icon(&dir.join("py.ico")));
+
+        // 连 default.ico 都没有 → 回退系统图标
+        std::fs::remove_file(&default).unwrap();
+        let outcome =
+            resolve_icon_value("js", IconMode::Custom, Path::new("zed.exe"), Some(&dir), None);
+        assert!(outcome.fell_back);
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// 模式解析：System / App 不产生回退，Custom 缺图标必须回退并给出原因

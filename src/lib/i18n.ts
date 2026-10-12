@@ -58,7 +58,7 @@ const zh: Record<string, string> = {
   "mode.custom": "自定义图标目录",
   "mode.system.hint": "按扩展名类型映射到 Windows 内置图标：代码 / 文本、HTML、XML、图片、批处理等（推荐）",
   "mode.app.hint": "统一使用 Zed 主程序自带的图标（可执行文件的第一个图标）",
-  "mode.custom.hint": "在图标目录中查找 <扩展名>.ico（如 py.ico），缺失的扩展名回退系统图标并列出提示",
+  "mode.custom.hint": "在图标目录中查找 <扩展名>.ico（如 py.ico）；缺失时自动使用目录内的 default.ico，仍缺失才回退系统图标",
   "mode.needsZed": "需要先在设置中指定 Zed 可执行文件",
 
   // ---- 列表 ----
@@ -510,7 +510,7 @@ const en: Record<string, string> = {
   "mode.custom": "Custom icon folder",
   "mode.system.hint": "Map each extension to a Windows built-in icon by type: code / text, HTML, XML, images, scripts, etc. (recommended)",
   "mode.app.hint": "Use the icon embedded in the Zed executable for every extension",
-  "mode.custom.hint": "Look up <extension>.ico in your folder (e.g. py.ico); missing files fall back to built-in icons and are reported",
+  "mode.custom.hint": "Looks up <extension>.ico in your folder (e.g. py.ico); missing ones use default.ico in the folder, and only then fall back to built-in icons",
   "mode.needsZed": "Specify the Zed executable in settings first",
 
   // ---- List ----
