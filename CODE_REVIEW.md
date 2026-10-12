@@ -149,6 +149,11 @@
 
 **验证**：31 测试全绿、clippy 0 告警、i18n 417 条中英一致且 327 引用全命中、`pnpm build` 通过。
 
+**补充缺陷（同日实测反馈，提交 9e2db8c）**：
+1. **闪控制台窗口**：scoop 检测沿 `<app>.shim` 解析，把 `bin\ZedG.exe`（3MB console shim）写进了关联命令 —— 每次打开文件闪黑窗。根因：ZedG 的 Scoop 包里 `bin\` 下是命令行 shim，编辑器本体在包根（350MB GUI）。修复：`prefer_gui_exe`（结果位于 `current\bin\` 时改用包根 GUI exe）+ 默认根目录扫描改为包根优先；用户注册表里的旧指向同步修正。
+2. **「移除注册」拒绝访问**：`remove_named_value` 用 `open`（默认只读句柄）删值，缺 `KEY_SET_VALUE` 权限。修复：改用 `create`（打开已存在键同样返回写权限句柄）。教训：windows-registry 里 `open` 与 `create` 的权限不对称，写操作一律走 `create`。
+3. 顺带修正注册表数据：关联命令与图标全部改指包根 GUI exe（规范反斜杠路径）；`Applications\ZedG.exe\DefaultIcon` 的异常指向（项目测试素材 json.ico）一并清理。
+
 ---
 
 ## 1. 结构评估
