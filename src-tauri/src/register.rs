@@ -23,26 +23,6 @@ use crate::registry;
 use crate::text::encoded_str;
 use crate::zed::Channel;
 
-/// 单个扩展名的注册结果
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RegisterState {
-    /// 本次新建了关联
-    Created,
-    /// 该扩展名原本就关联到本通道（无需处理）
-    AlreadyZed,
-    /// 已关联到其它程序，按约定跳过
-    TakenByOther,
-}
-
-/// 注册结果明细
-#[derive(Debug, Clone)]
-pub struct RegisterOutcome {
-    pub extension: String,
-    pub state: RegisterState,
-    /// 被其它程序占用时，占用者的 ProgID（供日志展示）
-    pub owner: Option<String>,
-}
-
 /// 扩展名归一化：去前导点、去空白、转小写
 pub fn normalize_extension(extension: &str) -> String {
     extension.trim().trim_start_matches('.').to_ascii_lowercase()
@@ -61,59 +41,6 @@ pub fn is_valid_extension(extension: &str) -> bool {
 /// 本通道下该扩展名应使用的 ProgID
 pub fn prog_id_for(channel: Channel, extension: &str) -> String {
     format!("{}{}", channel.prog_id_prefix(), normalize_extension(extension))
-}
-
-/// 为单个扩展名建立关联
-///
-/// 不覆盖其他程序的关联：若 `.<ext>` 的默认值指向别的 ProgID，返回 `TakenByOther`。
-pub fn register_extension(
-    channel: Channel,
-    extension: &str,
-    zed_exe: &Path,
-) -> Result<RegisterOutcome> {
-    let ext = normalize_extension(extension);
-    if !is_valid_extension(&ext) {
-        return Err(anyhow::anyhow!(
-            "{}",
-            encoded_str("back.extInvalid", &[extension])
-        ));
-    }
-    let prog_id = prog_id_for(channel, &ext);
-    let extension_key = format!(".{ext}");
-
-    // 已有默认值：指向本通道 → 视为已关联；指向别人 → 跳过，不越权改写
-    if let Some(current) = registry::get_default_value(&extension_key)? {
-        let current = current.trim().to_string();
-        if channel.owns_prog_id(&current) {
-            return Ok(RegisterOutcome {
-                extension: ext,
-                state: RegisterState::AlreadyZed,
-                owner: None,
-            });
-        }
-        return Ok(RegisterOutcome {
-            extension: ext,
-            state: RegisterState::TakenByOther,
-            owner: Some(current),
-        });
-    }
-
-    // 1. 打开命令：`"<exe>" "%1"`
-    let command = format!("\"{}\" \"%1\"", zed_exe.display());
-    registry::set_default_value(&format!("{prog_id}\\shell\\open\\command"), &command)?;
-
-    // 2. 类型描述（资源管理器"类型"列显示的内容；用 ProgID 本身，避免引入文案）
-    registry::set_default_value(&prog_id, &prog_id)?;
-
-    // 3. 建立关联：扩展名键的默认值指向本通道 ProgID
-    registry::set_default_value(&extension_key, &prog_id)?;
-
-    println!("[关联] 已为 .{ext} 建立关联 → {prog_id}");
-    Ok(RegisterOutcome {
-        extension: ext,
-        state: RegisterState::Created,
-        owner: None,
-    })
 }
 
 // ---------- 应用注册（仅 zedg 通道）----------

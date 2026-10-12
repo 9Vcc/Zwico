@@ -259,8 +259,6 @@ export default function App() {
           onImportPreset={() => void store.importPreset()}
           onToggleWatched={store.toggleWatched}
           onAddWatched={store.addWatched}
-          onClearWatched={store.clearWatched}
-          onRegisterWatched={() => store.setDialog("register")}
           onRegisterApp={() => void store.registerApp()}
           onUnregisterApp={() => void store.unregisterApp()}
           onOpenDefaultApps={() => void store.openDefaultApps()}

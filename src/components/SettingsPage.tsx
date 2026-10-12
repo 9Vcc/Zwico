@@ -7,19 +7,16 @@ import { useState } from "react";
 
 import { APP_VERSION, CHANNELS, type AppRegistration, type ExtStatus, type ZedInstallation } from "../api";
 import { baseName } from "../lib/iconInfo";
-import { EXT_PATTERN, PRESET_GROUPS } from "../lib/presets";
+import { allPresetExtensions, EXT_PATTERN } from "../lib/presets";
 import { t, type LangPref } from "../lib/i18n";
 import type { ChannelKey } from "../api";
 import { Select } from "./Select";
 import {
   Card,
-  IconAlert,
   IconBack,
-  IconStar,
   IconDownload,
   IconCheck,
   IconFolder,
-  IconPlus,
   IconSearch,
   IconUpload,
   Pill,
@@ -71,8 +68,6 @@ export function SettingsPage({
   onImportPreset,
   onToggleWatched,
   onAddWatched,
-  onClearWatched,
-  onRegisterWatched,
   onRegisterApp,
   onUnregisterApp,
   onToggleAutostart,
@@ -123,8 +118,6 @@ export function SettingsPage({
   onImportPreset: () => void;
   onToggleWatched: (ext: string) => void;
   onAddWatched: (exts: string[]) => void;
-  onClearWatched: () => void;
-  onRegisterWatched: () => void;
   onRegisterApp: () => void;
   onUnregisterApp: () => void;
   onToggleAutostart: () => void;
@@ -149,6 +142,10 @@ export function SettingsPage({
     );
     setCustomInput("");
   };
+
+  /** 手动添加的扩展名（不在预置组里的关注项） */
+  const presetSet = new Set(allPresetExtensions());
+  const customWatched = watched.filter((ext) => !presetSet.has(ext));
 
   /** 关注项的状态统计：已生效 / 被系统默认程序覆盖 / 未关联 */
   const statusCounts = watched.reduce(
@@ -342,137 +339,6 @@ export function SettingsPage({
             />
           </Card>
 
-          <Card title={t("settings.watch")} hint={t("settings.watch.hint")}>
-            <div className="row-btns">
-              <input
-                className="input"
-                placeholder={t("watch.custom.placeholder")}
-                value={customInput}
-                onChange={(event) => setCustomInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") addCustom();
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn--mini"
-                disabled={customInput.trim() === ""}
-                onClick={addCustom}
-              >
-                {t("watch.add")}
-              </button>
-            </div>
-            {customHint !== "" ? <p className="card__note">{customHint}</p> : null}
-
-            {PRESET_GROUPS.map((group) => (
-              <div className="watch-group" key={group.key}>
-                <div className="watch-group__head">
-                  <span className="field__label">{t(`watch.preset.${group.key}`)}</span>
-                  <button
-                    type="button"
-                    className="btn btn--mini"
-                    data-tip={t("watch.selectGroup")}
-                    onClick={() => onAddWatched(group.exts)}
-                  >
-                    <IconPlus size={11} />
-                  </button>
-                </div>
-                <div className="ext-grid">
-                  {group.exts.map((ext) => {
-                    const isWatched = watched.includes(ext);
-                    const status = extStatus[ext];
-                    const statusClass = !isWatched
-                      ? ""
-                      : status?.effectiveIsZed
-                        ? " ext-chip--ok"
-                        : status?.hasUserChoice && status?.classesRegistered
-                          ? " ext-chip--blocked"
-                          : "";
-                    const statusTip = !isWatched
-                      ? undefined
-                      : status?.effectiveIsZed
-                        ? t("watch.status.active.tip")
-                        : status?.hasUserChoice && status?.classesRegistered
-                          ? t("watch.status.blocked.tip")
-                          : t("watch.status.none.tip");
-                    return (
-                      <button
-                        key={ext}
-                        type="button"
-                        className={`ext-chip${isWatched ? " ext-chip--on" : ""}${statusClass}`}
-                        aria-pressed={isWatched}
-                        data-tip={statusTip}
-                        onClick={() => onToggleWatched(ext)}
-                      >
-                        {ext}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            <div className="settings__row">
-              <span className="counter">{t("watch.selected", [watched.length])}</span>
-              <div className="seg">
-                <button
-                  type="button"
-                  className="btn btn--mini"
-                  disabled={watched.length === 0}
-                  onClick={onClearWatched}
-                >
-                  {t("watch.clear")}
-                </button>
-              </div>
-            </div>
-
-            {/* 状态诊断：解释"为什么注册了却没生效" */}
-            {watched.length > 0 ? (
-              <div className="watch-status">
-                <div className="watch-status__row">
-                  <Pill tone="ok">
-                    {t("watch.status.active")} {statusCounts.active}
-                  </Pill>
-                  {statusCounts.blocked > 0 ? (
-                    <Pill tone="warn">
-                      {t("watch.status.blocked")} {statusCounts.blocked}
-                    </Pill>
-                  ) : null}
-                  {statusCounts.none > 0 ? (
-                    <Pill tone="muted">
-                      {t("watch.status.none")} {statusCounts.none}
-                    </Pill>
-                  ) : null}
-                </div>
-                <p className="card__note">{t("watch.explain")}</p>
-                <button
-                  type="button"
-                  className="btn btn--wide"
-                  data-tip={t("watch.openSettings.tip")}
-                  onClick={onOpenDefaultApps}
-                >
-                  <IconFolder size={13} />
-                  {t("watch.openSettings")}
-                </button>
-              </div>
-            ) : null}
-
-            <button
-              type="button"
-              className="btn btn--primary btn--wide"
-              disabled={watched.length === 0}
-              data-tip={t("watch.register.tip")}
-              onClick={onRegisterWatched}
-            >
-              <IconCheck size={14} />
-              {t("watch.register", [watched.length])}
-            </button>
-            <p className="inline-warn">
-              <IconAlert size={13} />
-              {t("watch.register.warn")}
-            </p>
-          </Card>
-
           {/* 应用注册：仅汉化版通道提供（官方安装器自带，Scoop 版没有） */}
           {channel === "zedg" ? (
             <Card title={t("settings.appReg")} hint={t("settings.appReg.hint")}>
@@ -482,30 +348,101 @@ export function SettingsPage({
                     ? t("appReg.registered", [appReg.covered])
                     : t("appReg.notRegistered")}
                 </Pill>
+                <div className="seg">
+                  <button
+                    type="button"
+                    className="btn btn--mini"
+                    disabled={!appReg.registered}
+                    data-tip={t("appReg.unregister.tip")}
+                    onClick={onUnregisterApp}
+                  >
+                    {t("appReg.unregister")}
+                  </button>
+                </div>
               </div>
 
-              <div className="btn-row">
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={watched.length === 0}
-                  data-tip={t("appReg.register.tip")}
-                  onClick={onRegisterApp}
-                >
-                  <IconStar size={13} />
-                  {t("appReg.register")}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={!appReg.registered}
-                  data-tip={t("appReg.unregister.tip")}
-                  onClick={onUnregisterApp}
-                >
-                  {t("appReg.unregister")}
-                </button>
+              {/* 手动添加扩展名：补充预置之外的类型（进关注列表，注册时一并覆盖） */}
+              <div className="field field--sub">
+                <div className="field__head">
+                  <span className="field__label">{t("watch.custom.label")}</span>
+                </div>
+                <div className="row-btns">
+                  <input
+                    className="input"
+                    placeholder={t("watch.custom.placeholder")}
+                    value={customInput}
+                    onChange={(event) => setCustomInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") addCustom();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--mini"
+                    disabled={customInput.trim() === ""}
+                    onClick={addCustom}
+                  >
+                    {t("watch.add")}
+                  </button>
+                </div>
+                {customHint !== "" ? <p className="card__note">{customHint}</p> : null}
+                {customWatched.length > 0 ? (
+                  <div className="ext-grid">
+                    {customWatched.map((ext) => (
+                      <button
+                        key={ext}
+                        type="button"
+                        className="ext-chip ext-chip--on"
+                        data-tip={t("watch.remove.tip")}
+                        onClick={() => onToggleWatched(ext)}
+                      >
+                        {ext}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
+              {/* 状态诊断：解释"为什么注册了却没生效" */}
+              {watched.length > 0 ? (
+                <div className="watch-status">
+                  <div className="watch-status__row">
+                    <Pill tone="ok">
+                      {t("watch.status.active")} {statusCounts.active}
+                    </Pill>
+                    {statusCounts.blocked > 0 ? (
+                      <Pill tone="warn">
+                        {t("watch.status.blocked")} {statusCounts.blocked}
+                      </Pill>
+                    ) : null}
+                    {statusCounts.none > 0 ? (
+                      <Pill tone="muted">
+                        {t("watch.status.none")} {statusCounts.none}
+                      </Pill>
+                    ) : null}
+                  </div>
+                  <p className="card__note">{t("watch.explain")}</p>
+                  <button
+                    type="button"
+                    className="btn btn--wide"
+                    data-tip={t("watch.openSettings.tip")}
+                    onClick={onOpenDefaultApps}
+                  >
+                    <IconFolder size={13} />
+                    {t("watch.openSettings")}
+                  </button>
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                className="btn btn--primary btn--wide"
+                data-tip={t("appReg.register.tip")}
+                onClick={onRegisterApp}
+              >
+                <IconCheck size={14} />
+                {t("appReg.register")}
+              </button>
               <p className="card__note">{t("appReg.coverage", [watched.length])}</p>
             </Card>
           ) : null}

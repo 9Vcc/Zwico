@@ -38,7 +38,7 @@ import { useSvgIco } from "./useSvgIco";
 import { useToasts } from "./useToast";
 
 export type Theme = "dark" | "light";
-export type DialogKind = "remove" | "refresh" | "quit" | "undo" | "register";
+export type DialogKind = "remove" | "refresh" | "quit" | "undo";
 /** 主视图：主界面 / 设置页 */
 export type AppView = "main" | "settings";
 
@@ -359,10 +359,6 @@ export function useAppStore() {
     });
   }, []);
 
-  const clearWatched = useCallback(() => {
-    setConfig((prev) => ({ ...prev, watched: [] }));
-  }, []);
-
   /** 查询关注列表的关联状态：谁在生效、谁被系统默认程序挡住 */
   const inspectWatched = useCallback(async () => {
     if (watched.length === 0) {
@@ -484,31 +480,6 @@ export function useAppStore() {
       fail("fail.openSettings", err);
     }
   }, [fail]);
-
-  /** 为关注列表中的扩展名建立 Zed 关联（改变打开方式，需先经确认对话框） */
-  const registerWatched = useCallback(async () => {
-    const list = watched;
-    if (list.length === 0) {
-      push("warn", t("toast.noExtensions"));
-      return;
-    }
-    if (!zedPath) {
-      fail("fail.applyNoZed.title", new Error(t("fail.applyNoZed")));
-      return;
-    }
-    setBusy(true);
-    setProgress({ current: 0, total: list.length, extension: "" });
-    try {
-      appendLogs(await api.registerExtensions(channel, list, zedPath));
-      succeed(t("watch.registered", [list.length]));
-    } catch (err) {
-      fail("fail.register", err);
-    } finally {
-      setBusy(false);
-      setProgress(null);
-      await load(channel);
-    }
-  }, [appendLogs, channel, fail, load, push, succeed, watched, zedPath]);
 
   const selectedList = useMemo(
     () => associations.filter((a) => selected.has(a.extension)),
@@ -878,8 +849,7 @@ export function useAppStore() {
     if (kind === "remove") void removeSelected();
     else if (kind === "refresh") void runRefresh();
     else if (kind === "undo") void runUndo();
-    else if (kind === "register") void registerWatched();
-  }, [dialog, registerWatched, removeSelected, runRefresh, runUndo]);
+  }, [dialog, removeSelected, runRefresh, runUndo]);
 
   const copyLogs = useCallback(async () => {
     try {
@@ -976,8 +946,6 @@ export function useAppStore() {
     clearSelection,
     addWatched,
     toggleWatched,
-    clearWatched,
-    registerWatched,
     registerApp,
     unregisterApp,
     toggleAutostart,

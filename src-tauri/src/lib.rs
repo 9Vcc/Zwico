@@ -973,94 +973,6 @@ async fn save_ico_file(path: String, data: Vec<u8>) -> Result<(), String> {
     .await
 }
 
-/// 为一批扩展名建立文件关联（创建 ProgID + 写扩展名键默认值）
-///
-/// **这是改变打开方式的操作**，只能由用户在设置页显式触发（前置确认对话框）。
-/// 不覆盖其他程序的既有关联：遇到已指向别的 ProgID 的扩展名会跳过并报告。
-#[tauri::command]
-async fn register_extensions(
-    window: tauri::Window,
-    state: State<'_, AppState>,
-    channel: String,
-    extensions: Vec<String>,
-    zed_path: String,
-) -> Result<Vec<LogLineDto>, String> {
-    let channel = Channel::from_key(&channel)
-        .ok_or_else(|| encoded("back.unknownChannel", std::slice::from_ref(&channel)))?;
-    if extensions.is_empty() {
-        return Err("back.noTargets".to_string());
-    }
-    let zed = PathBuf::from(zed_path.trim());
-    if zed_path.trim().is_empty() || !zed.is_file() {
-        return Err("back.appNeedsZed".to_string());
-    }
-
-    let _guard = BusyGuard::acquire(state.busy.clone());
-
-    blocking(move || {
-        let total = extensions.len();
-        let mut created = 0usize;
-        let mut already: Vec<String> = Vec::new();
-        let mut taken: Vec<(String, String)> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        for (index, ext) in extensions.iter().enumerate() {
-            if let Err(err) = window.emit(
-                "progress",
-                ProgressPayload {
-                    current: index + 1,
-                    total,
-                    extension: ext.clone(),
-                },
-            ) {
-                eprintln!("[警告] 发送进度事件失败：{err}");
-            }
-
-            match register::register_extension(channel, ext, &zed) {
-                Ok(outcome) => match outcome.state {
-                    register::RegisterState::Created => created += 1,
-                    register::RegisterState::AlreadyZed => already.push(outcome.extension),
-                    register::RegisterState::TakenByOther => taken.push((
-                        outcome.extension,
-                        outcome.owner.unwrap_or_else(|| "?".to_string()),
-                    )),
-                },
-                Err(err) => failed.push((ext.clone(), short_reason(&err))),
-            }
-        }
-
-        let mut log = Vec::new();
-        if created > 0 {
-            log.push(info_p("back.regCreated", vec![created.to_string()]));
-        }
-        if !already.is_empty() {
-            log.push(info_p(
-                "back.regAlready",
-                vec![already.len().to_string(), already.join(", ")],
-            ));
-        }
-        if !taken.is_empty() {
-            let detail = taken
-                .iter()
-                .map(|(ext, owner)| format!("{ext} → {owner}"))
-                .collect::<Vec<_>>()
-                .join("; ");
-            log.push(warn_p(
-                "back.regTaken",
-                vec![taken.len().to_string(), detail],
-            ));
-        }
-        if let Some(line) = failure_log(total, &failed) {
-            log.push(line);
-        }
-        if log.is_empty() {
-            log.push(info("back.regNothing"));
-        }
-        Ok(log)
-    })
-    .await
-}
-
 /// 检查一批扩展名的关联状态（只读）
 ///
 /// 用于回答「为什么注册了关联却没生效」：`UserChoice` 存在且指向其他程序时，
@@ -1273,7 +1185,6 @@ pub fn run() {
             preview_icon,
             apply_icons,
             remove_icons,
-            register_extensions,
             register_application,
             unregister_application,
             inspect_application_registration,

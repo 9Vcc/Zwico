@@ -123,9 +123,6 @@ export const api = {
   applyIcons: (channel: ChannelKey, targets: Target[], mode: IconMode, zedPath: string, customDir: string | null) =>
     invoke<LogLine[]>("apply_icons", { channel, targets, mode, zedPath, customDir }),
   removeIcons: (targets: Target[]) => invoke<LogLine[]>("remove_icons", { targets }),
-  /** 为扩展名建立 Zed 关联（改变打开方式，需用户显式触发） */
-  registerExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
-    invoke<LogLine[]>("register_extensions", { channel, extensions, zedPath }),
   /** 完整注册 ZedG 为系统可见应用（仅 zedg 通道；不改变默认打开方式） */
   registerApplication: (channel: ChannelKey, extensions: string[], zedPath: string) =>
     invoke<LogLine[]>("register_application", { channel, extensions, zedPath }),

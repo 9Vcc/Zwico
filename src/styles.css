@@ -1960,19 +1960,6 @@ kbd {
 
 /* ===== 关注列表（设置页）与列表筛选 ===== */
 
-.watch-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.watch-group__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .ext-grid {
   display: flex;
   flex-wrap: wrap;
