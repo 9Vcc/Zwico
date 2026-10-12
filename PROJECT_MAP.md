@@ -58,6 +58,7 @@ RsIcon-tauri/
 │       ├── zed.rs                    通道定义 + 安装探测 + 全量扫描 + 归属判定
 │       ├── association.rs            双源枚举 + 图标状态 + 共享影响面
 │       ├── icon.rs                   图标取值 / 批量设置删除 / 失效判定
+│       ├── register.rs               扩展名关联注册（唯一改变打开方式的模块）
 │       ├── text.rs                   「key + 参数」编码（前端 tEncoded 还原）
 │       ├── iconrender.rs             图标渲染 PNG（GDI，第二处 unsafe 模块）
 │       └── refresh.rs                通知 Shell / 清缓存 / 重启 explorer
@@ -146,7 +147,7 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 | `ContextMenu.tsx` | `ContextMenu` | 统一自绘右键菜单（分隔线 / 禁用项 / 夹在窗口内） |
 | `Select.tsx` | `Select` | 自绘下拉（按钮 + 浮层列表；点击外部 / Esc 关闭，方向键与 Enter 可选） |
 | `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内专属图标按钮 + 右键菜单）、`EmptyState` |
-| `SettingsPage.tsx` | `SettingsPage` | 设置页：外观与布局 / Zed 安装 / 刷新行为 / 配置与数据 / 快捷键 / 关于 |
+| `SettingsPage.tsx` | `SettingsPage` | 设置页：外观与布局（含语言）/ Zed 安装 / 刷新行为 / **关联扩展名** / 配置与数据 / 快捷键 / 关于 |
 | `IconSettingsCard.tsx` | `IconSettingsCard` | 图标来源模式、自定义目录（Zed 路径只显示状态并跳转设置页） |
 | `ActionCards.tsx` | `ActionsCard` `MaintenanceCard` | 操作（应用 / 恢复 / 撤销 / SVG 转 ICO 入口）、刷新与修复（含附加动作摘要） |
 | `SvgToIcoDialog.tsx` | `SvgToIcoDialog` | SVG 预览 + 尺寸勾选 + 转换 + 保存 |
@@ -160,7 +161,7 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 | `APP_VERSION` | 版本号（与 package.json / Cargo.toml / tauri.conf.json 手动同步） |
 | `CHANNELS` / `MODES` | 通道表（含 `exeName`，供图标来源推断）/ 图标来源表 |
 | 类型 | `Association`（含 `sharedWith` `iconState`）/ `LogLine`(level) / `LoadState` / `BootstrapState` / `ProgressPayload` / `Target`(customIcon) / `UndoStatus` / `ZedInstallation` |
-| `api` | 19 个 invoke 封装：`bootstrap` `loadState` `scanIcoCount` `scanZedInstallations` `previewIcon` `applyIcons` `removeIcons` `refreshExplorer` `undoStatus` `undoLast` `savePresetFile` `loadPresetFile` `readSvgFile` `saveIcoFile` `windowMinimize` `windowToggleMaximize` `windowClose` `startWindowDrag` `windowIsMaximized` `confirmQuit` |
+| `api` | 20 个 invoke 封装：`bootstrap` `loadState` `scanIcoCount` `scanZedInstallations` `previewIcon` `applyIcons` `removeIcons` `refreshExplorer` `undoStatus` `undoLast` `savePresetFile` `loadPresetFile` `readSvgFile` `saveIcoFile` `windowMinimize` `windowToggleMaximize` `windowClose` `startWindowDrag` `windowIsMaximized` `confirmQuit` |
 | `onProgress` / `onCloseRequested` / `onWindowMaximized` | 事件订阅，返回取消函数 |
 
 ### `src/styles.css` 段落

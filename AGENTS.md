@@ -45,6 +45,7 @@ cd src-tauri && cargo clippy --all-targets
 8. **改前端后必须重新 `pnpm tauri build`**（dist 在编译期嵌入 exe）；`pnpm tauri dev` 不受影响。
 9. **busy 只能经 `BusyGuard` 置位**（RAII，`Drop` 时复位）。不要手写 `store(true/false)`——异常路径（`?` 提前返回、任务 panic）会漏掉复位，此后窗口将永远关不掉。只读命令不置 busy。
 10. **用户可见的信息必须经返回值或事件送到前端**：release 隐藏控制台，`println!` 只是 debug 手段。回退、跳过、失败明细都要出现在日志面板里（`LogLineDto` 的 `level` 分 info/warn/error）。
+12. **关联注册（`register.rs`）是唯一会改变「打开方式」的功能**：只能由用户在设置页显式触发并经过确认对话框，禁止进入自动流程/启动流程/测试用例；扩展名已指向其他程序时必须跳过并报告，不得覆盖（见 DESIGN D35）。
 11. **一切用户可见文案必须走 i18n**：前端用 `t("key", [参数])`，字典在 `src/lib/i18n.ts`（中英各一份，条目数必须一致）；后端**只返回 key**（`LogLineDto{key,params,level}` 或 `text::encoded(key, &[参数])`），不得再返回中文。改完跑 `target/ui-check/check-i18n.py` 校验引用与字典一致。
 
 ---

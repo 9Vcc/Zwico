@@ -317,6 +317,19 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 - **语言选择**：`LangPref = "auto" | "zh" | "en"` 存配置；`auto` 时用 `navigator.language`（WebView 的语言即系统语言）判断，因此**首次启动会自动匹配系统语言**。
 - **校验**：`target/ui-check/check-i18n.py` 比对"代码引用的 key"与"字典条目"（当前 280 个引用全部命中、中英条目数一致）。新增文案后应跑一次。
 
+### D35 · 关联注册（边界扩张的唯一例外）
+
+原非目标明写"不做改变默认打开程序"。但用户需要"预置常用扩展名一键建立关联"，
+因此新增 `register.rs` —— 这是本项目**唯一会改变打开方式的功能**，配套约束：
+
+- **只能由用户在设置页显式触发**，前置确认对话框（`dialog.register.*`），不进任何自动流程、启动流程或测试；
+- 仍只写 `HKCU\Software\Classes`；**绝不触碰 `FileExts\<ext>\UserChoice`**（Windows 有完整性保护，且那是用户的默认程序选择）；
+- 写入内容：`<ProgID>\shell\open\command` = `"<zed.exe>" "%1"`、`<ProgID>` 描述、最后才写 `.<ext>` 默认值 = ProgID；
+- **扩展名已指向其他程序时一律跳过**（`RegisterState::TakenByOther`），报告占用者 ProgID，绝不覆盖用户既有选择；
+- 已指向本通道时视为已关联（`AlreadyZed`），不重复写。
+
+对应的关注列表（`watched`）本身是纯配置：勾选与保存不产生任何系统写入，只有点"建立关联"才写注册表。
+
 ---
 
 ## 5. 已知限制
