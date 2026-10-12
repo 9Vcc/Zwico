@@ -1,0 +1,7 @@
+# indexmap 1.9.3（tauri-build → schemars 0.8 依赖）的 build.rs 依赖
+# `rustc --print cfg` 里的 has_std 判定，新版 rustc 不再输出该 cfg，
+# 导致其 `IndexMap<K, V, S = RandomState>` 退化成无默认参数版本，
+# schemars 0.8 编译报 E0107。此处补回该 cfg（对本仓库其余代码无影响：
+# 没有其他 crate 读取 has_std）。待 tauri-build 迁移 schemars 1.x 后可移除。
+[build]
+rustflags = ["--cfg", "has_std"]
