@@ -178,7 +178,7 @@ export function SettingsPage({
       </div>
 
       <div className="settings__grid">
-        <div className="settings__col">
+        <div className="settings__col settings__col--main">
           <Card title={t("settings.appearance")} hint={t("settings.appearance.hint")}>
             <div className="settings__row">
               <span className="field__label">{t("settings.theme")}</span>
@@ -268,82 +268,8 @@ export function SettingsPage({
             />
           </Card>
 
-          <Card title={t("settings.zed")} hint={t("settings.zed.hint")}>
-            <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
-              <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
-              <span className="path__text">
-                {zedPath ? baseName(zedPath) : t("zed.notFound")}
-              </span>
-              <span className="path__sub">{zedPath ?? t("zed.notFound.hint")}</span>
-            </div>
-
-            <div className="row-btns">
-              <button
-                type="button"
-                className="btn btn--mini"
-                disabled={scanning}
-                data-tip={t("settings.zed.detect.tip")}
-                onClick={onScan}
-              >
-                {scanning ? <Spinner size={11} /> : <IconSearch size={11} />}
-                {t("settings.zed.detect")}
-              </button>
-              <button
-                type="button"
-                className="btn btn--mini"
-                data-tip={t("settings.zed.pick.tip")}
-                onClick={onPickZed}
-              >
-                <IconFolder size={11} />
-                {t("settings.zed.pick")}
-              </button>
-            </div>
-
-            {installations.length > 0 ? (
-              <ul className="install-list" aria-label={t("settings.zed.scanned")}>
-                {installations.map((item) => {
-                  const active = zedPath === item.path;
-                  return (
-                    <li key={item.path}>
-                      <button
-                        type="button"
-                        className={`install-item${active ? " install-item--on" : ""}`}
-                        title={`${item.path}\n${t("settings.zed.source", [t(item.source)])}`}
-                        onClick={() => onUseInstallation(item.path)}
-                      >
-                        <span className="install-item__channel">
-                          {CHANNELS.some((c) => c.key === item.channel)
-                            ? t(`channel.${item.channel}`)
-                            : item.channel}
-                        </span>
-                        <span className="install-item__path">{item.path}</span>
-                        <span className="install-item__source">{t(item.source)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-          </Card>
-
-          <Card title={t("settings.refresh")} hint={t("settings.refresh.hint")}>
-            <Switch
-              checked={clearCache}
-              onChange={onClearCacheChange}
-              label={t("settings.clearCache")}
-              title={t("settings.clearCache.tip")}
-            />
-            <Switch
-              checked={restartExplorer}
-              onChange={onRestartExplorerChange}
-              label={t("settings.restartExplorer")}
-              title={t("settings.restartExplorer.tip")}
-            />
-          </Card>
-
-          {/* 应用注册：仅汉化版通道提供（官方安装器自带，Scoop 版没有） */}
-          {channel === "zedg" ? (
-            <Card title={t("settings.appReg")} hint={t("settings.appReg.hint")}>
+            {channel === "zedg" ? (
+          <Card title={t("settings.appReg")} hint={t("settings.appReg.hint")}>
               <div className="settings__row">
                 <Pill tone={appReg.registered ? "ok" : "muted"}>
                   {appReg.registered
@@ -448,10 +374,82 @@ export function SettingsPage({
               </button>
               <p className="card__note">{t("appReg.coverage", [watched.length])}</p>
             </Card>
-          ) : null}
+            ) : null}
+          <Card title={t("settings.zed")} hint={t("settings.zed.hint")}>
+            <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
+              <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
+              <span className="path__text">
+                {zedPath ? baseName(zedPath) : t("zed.notFound")}
+              </span>
+              <span className="path__sub">{zedPath ?? t("zed.notFound.hint")}</span>
+            </div>
+
+            <div className="row-btns">
+              <button
+                type="button"
+                className="btn btn--mini"
+                disabled={scanning}
+                data-tip={t("settings.zed.detect.tip")}
+                onClick={onScan}
+              >
+                {scanning ? <Spinner size={11} /> : <IconSearch size={11} />}
+                {t("settings.zed.detect")}
+              </button>
+              <button
+                type="button"
+                className="btn btn--mini"
+                data-tip={t("settings.zed.pick.tip")}
+                onClick={onPickZed}
+              >
+                <IconFolder size={11} />
+                {t("settings.zed.pick")}
+              </button>
+            </div>
+
+            {installations.length > 0 ? (
+              <ul className="install-list" aria-label={t("settings.zed.scanned")}>
+                {installations.map((item) => {
+                  const active = zedPath === item.path;
+                  return (
+                    <li key={item.path}>
+                      <button
+                        type="button"
+                        className={`install-item${active ? " install-item--on" : ""}`}
+                        title={`${item.path}\n${t("settings.zed.source", [t(item.source)])}`}
+                        onClick={() => onUseInstallation(item.path)}
+                      >
+                        <span className="install-item__channel">
+                          {CHANNELS.some((c) => c.key === item.channel)
+                            ? t(`channel.${item.channel}`)
+                            : item.channel}
+                        </span>
+                        <span className="install-item__path">{item.path}</span>
+                        <span className="install-item__source">{t(item.source)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </Card>
         </div>
 
-        <div className="settings__col">
+        <div className="settings__col settings__col--side">
+          <Card title={t("settings.refresh")} hint={t("settings.refresh.hint")}>
+            <Switch
+              checked={clearCache}
+              onChange={onClearCacheChange}
+              label={t("settings.clearCache")}
+              title={t("settings.clearCache.tip")}
+            />
+            <Switch
+              checked={restartExplorer}
+              onChange={onRestartExplorerChange}
+              label={t("settings.restartExplorer")}
+              title={t("settings.restartExplorer.tip")}
+            />
+          </Card>
+
           <Card title={t("settings.data")} hint={t("settings.data.hint")}>
             <div className="preset__meta">
               {perExtensionCount > 0 ? (

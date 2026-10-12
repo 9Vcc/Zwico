@@ -1766,13 +1766,14 @@ body {
   font-weight: 500;
 }
 
-/* 两列（宽屏）/ 单列（窄屏）：卡片在各列内独立堆叠，避免行对齐留白 */
+/* 两列（宽屏）/ 单列（窄屏）：卡片在各列内独立堆叠，避免行对齐留白。
+   左列（表单类）略宽于右列（信息类）；大屏放宽画布利用。 */
 .settings__grid {
   display: flex;
   gap: 10px;
   align-items: flex-start;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1280px;
 }
 
 .settings__col {
@@ -1781,6 +1782,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.settings__col--main {
+  flex: 1.12 1 0;
+}
+
+.settings__col--side {
+  flex: 0.88 1 0;
 }
 
 .settings__row {
