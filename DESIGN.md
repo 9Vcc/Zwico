@@ -176,19 +176,66 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 - **配置持久化**：`localStorage` 的 `rsicon-config-v1` 保存主题、来源模式、图标目录、逐项图标、两个开关、侧栏宽度、日志折叠态（D16 只存了主题）。
 - **开发预览**：`src/dev-mock.ts` 仅在 DEV 且检测不到 Tauri 运行时时装入假数据，便于只调试界面；支持 `?theme=light` / `?log=collapsed` / `?sidebar=360` 覆盖形态。生产构建会移除该分支。
 
+### D22 · 无边框窗口 + 自绘标题栏
+
+窗口改 `decorations: false`（`tauri.conf.json`），标题栏由 `components/TitleBar.tsx` 自绘：左侧品牌区兼作拖拽区（`window_start_drag` 命令，双击切换最大化），右侧为通道选择、主题、最小化/最大化/关闭。
+
+- **关闭必须走 `window_close`（= `Window::close()`）而不是 `destroy()`**：前者会触发 `CloseRequested`，任务进行中仍会被 D8 的拦截逻辑挡住。
+- **窗口边缘缩放依赖系统保留的 `WS_SIZEBOX`**：查 tao 源码确认，`to_window_styles` 在 `resizable: true` 时始终加入该样式，而 `decorations: false` 只移除标题栏相关样式（`adjust_window_rect` 里对 `WS_SIZEBOX` 的处理只作用于"计算客户区尺寸"的临时副本）。因此**不需要**自绘 8 向缩放热区，也**不需要**引入 `tauri-runtime` 依赖去拿 `ResizeDirection`。
+- 窗口配置同时开了 `shadow: true` 以获得 DWM 阴影；`.app` 内侧加 1px 描边让窗口边界清晰。
+
+### D23 · 图标预览：GDI 渲染成 PNG，前端按值缓存
+
+列表行在扩展名**前面**直接显示该项当前真实生效的图标（`iconrender.rs` + `components/AssociationList.tsx`）。
+
+- 渲染链：`SHDefExtractIconW`（支持负数资源 ID，如 `imageres.dll,-102`）→ `GetIconInfo` → `GetDIBits` 读 32bpp → alpha 优先取位图通道、缺失时按 AND 掩码推断 → 面积平均缩放到 16×16 → 自写 PNG 编码（zlib stored block）→ `data:image/png;base64`。
+- **降级**：任何一步失败都返回 `None`，前端显示虚线占位方块，不影响功能。
+- **缓存策略**：后端按「值 + 尺寸」缓存（同一 `imageres.dll,-102` 只渲染一次）；前端按值去重后再请求，因此 439 个扩展名通常只发个位数请求。
+- 这是继 `refresh.rs` 之后**第二处允许 `unsafe` 的模块**，所有调用点标注 `// SAFETY：`。
+- 解码后的 PNG 由测试断言（`iVBORw0KGgo` 前缀 = PNG 魔数），并有 `render_probe` 探针打印真实图标的渲染结果。
+
+### D24 · SVG 转 ICO：全部在前端完成
+
+`lib/ico.ts` + `hooks/useSvgIco.ts` + `components/SvgToIcoDialog.tsx`。**不新增任何依赖**（未引入 resvg 之类光栅化库）。
+
+- SVG 文本 → Blob → `Image` → Canvas 光栅化 → PNG → ICO 容器（Vista+ 支持的「PNG 内嵌」形式：`ICONDIR` + `ICONDIRENTRY[]` + PNG 数据，256 用字节位 0 表示）。
+- 可选尺寸 16/24/32/48/64/128/256，前端即时预览，输出前可反复调整。
+- 后端只提供两个受约束的文件命令：`read_svg_file`（限 `.svg`、≤4 MiB）与 `save_ico_file`（限 `.ico`、≤4 MiB）。
+- **跨端闭环验证**：`iconrender.rs` 的 `ico_container_is_readable_by_system` 按同一结构手工构造 ICO 写入临时文件，再用系统 API 读回并断言内部 PNG 完好 —— 以此证明前端生成的 `.ico` Windows 能认（而不是只靠肉眼）。
+
+### D25 · Zed 安装自动扫描
+
+`zed.rs::scan_installations` 全量扫描本机候选，命令 `scan_zed_installations` 返回给界面（`IconSettingsCard` 的「自动检测」按钮 + 结果列表）。
+
+- 来源与优先级：卸载注册表 → 常见安装目录（含 `%ProgramFiles%` / `%LOCALAPPDATA%\Programs` 下名字含 zed 的一级目录）→ scoop（shim 解析 + `apps/*` 扫描，支持自定义根）→ PATH。
+- 与 `detect_zed_path` 的区别：**不限通道、不提前返回**，尽量列全供用户挑选。
+- 通道判定：文件名精确匹配通道 exe 名优先，否则按路径关键字兜底。
+- **自动选用规则**：`bootstrap` 时若当前通道探测不到 Zed，则全量扫描并自动选用第一个候选（写日志说明来源）；界面上的「自动检测」在只扫到一个结果时也会自动选用。
+
+### D26 · 布局尺寸的边界约束
+
+`lib/layout.ts` 提供 `clampSidebarWidth` / `clampLogHeight`，所有拖拽与窗口 resize 都必须经过它们：
+
+- 侧栏：200–420px，且**保证内容区至少 380px**
+- 日志：72–420px，且**保证主区至少 260px**
+- 窗口 `resize` 时重新夹紧（hook 内对"值未变"的情况直接返回原 state，避免无谓重渲染与 localStorage 写入）
+- 日志面板新增横向拖拽条（折叠时隐藏）
+
 ---
 
 ## 5. 已知限制
 
 | 限制 | 影响 | 位置 |
 |---|---|---|
-| `bundle.active = false` | 只产出 exe，不出 msi/nsis 安装包 | `tauri.conf.json:29` |
+| `bundle.active = false` | 只产出 exe，不出 msi/nsis 安装包 | `tauri.conf.json` |
 | exe 图标为占位 | `app-icon.png`（1024 源图）可替换后 `pnpm tauri icon app-icon.png` 重生成 | README |
-| **UI 重构未做真机截图验证** | 类型检查、构建、类名/变量交叉校验均通过，但视觉与手感需跑一次 `pnpm tauri dev` 确认 | 2026-10-12 重构 |
-| 忙碌态与关窗确认未真机验证 | 需一次真实写入才能触发；dev 下可复现 | 需用户操作一次 |
+| **界面交互未做真机验证** | 类型检查/构建/测试/类名校验均通过，但视觉与手感（无边框标题栏、拖拽、图标预览、SVG 工具）需跑一次 `pnpm tauri dev` 确认 | 2026-10-12 |
+| 无边框窗口的拖拽与最大化未实测 | 依据 tao 源码确认保留 `WS_SIZEBOX`（可缩放），但实际手感与 DWM 阴影/圆角需真机确认 | D22 |
+| 图标预览在高 DPI 下未验证 | 固定取 16×16；缩放比 >100% 时系统可能会选更大的图标源 | D23 |
+| 忙碌态与关窗确认未真机验证 | 需一次真实写入才能触发 | 需用户操作一次 |
 | 日志面板"复制/清空"未真机点验 | 自动化合成点击在该区域打不中 | `LogPanel.tsx` |
 | 双仓库逻辑同步已失效 | 五个模块出现分叉，不再可整文件复制 | D18 / §6 待决 2 |
-| `csp` 仍为 null | 未启用内容安全策略（需能真机验证 IPC 放行后再开，否则可能白屏） | `tauri.conf.json:25` |
+| `csp` 仍为 null | 未启用内容安全策略（需能真机验证 IPC 放行后再开，否则可能白屏） | `tauri.conf.json` |
 | 共享 ProgID 无法逐项隔离 | 仍按 D3 只做提示 + 影响面量化 | D3 / D20 |
 
 ---

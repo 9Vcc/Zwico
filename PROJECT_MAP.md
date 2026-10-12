@@ -21,37 +21,42 @@ RsIcon-tauri/
 │   ├── dev-mock.ts                   浏览器预览假数据（仅 DEV，生产构建移除）
 │   ├── api.ts                        协议层：类型 + invoke 封装 + 事件订阅
 │   ├── styles.css                    设计系统：变量 / 基础 / 布局 / 组件
-│   ├── App.tsx                       外壳：组合 store 与组件 + 快捷键 + 侧栏拖拽
+│   ├── App.tsx                       外壳：组合 store 与组件 + 快捷键 + 侧栏/日志拖拽
 │   ├── hooks/
-│   │   ├── useAppStore.ts            全部状态与动作（配置持久化 / bootstrap / 失败出口）
+│   │   ├── useAppStore.ts            全部状态与动作（配置持久化 / bootstrap / 失败出口 / 图标预览）
+│   │   ├── useSvgIco.ts              SVG 转 ICO 工具的状态与动作
 │   │   └── useToast.tsx              浮层提示（useToasts + ToastStack）
 │   ├── lib/
 │   │   ├── iconInfo.ts               DefaultIcon 解析、图标来源推断、格式化
+│   │   ├── ico.ts                    SVG 光栅化与 ICO 打包
+│   │   ├── layout.ts                 侧栏/日志尺寸的边界约束
 │   │   └── presets.ts                预设格式、校验与序列化
 │   ├── components/
 │   │   ├── ui.tsx                    Card / Pill / Spinner / Switch + SVG 图标集
-│   │   ├── TopBar.tsx                品牌 + 通道选择 + 主题切换
-│   │   ├── AssociationList.tsx       搜索 / 列表 / Row / EmptyState
-│   │   ├── IconSettingsCard.tsx      Zed 路径 / 来源模式 / 图标目录
+│   │   ├── TitleBar.tsx              自绘标题栏（拖拽区 + 通道 + 主题 + 窗口按钮）
+│   │   ├── AssociationList.tsx       搜索 / 列表 / Row（含图标预览）/ EmptyState
+│   │   ├── IconSettingsCard.tsx      Zed 路径（自动检测）/ 来源模式 / 图标目录 / 图标工具
 │   │   ├── ActionCards.tsx           ActionsCard / UndoCard / MaintenanceCard
 │   │   ├── PresetCard.tsx            预设导出与导入
+│   │   ├── SvgToIcoDialog.tsx        SVG 转 ICO 对话框
 │   │   ├── LogPanel.tsx              日志（分级 / 吸底 / 折叠 / 右键复制）
 │   │   └── ConfirmDialog.tsx         确认框（Esc 取消 / Enter 确定）
 │   └── vite-env.d.ts
 ├── src-tauri/
 │   ├── Cargo.toml                    依赖与体积优先 profile
-│   ├── build.rs / tauri.conf.json    窗口 960×720、devUrl 1420、bundle.active=false
+│   ├── build.rs / tauri.conf.json    无边框窗口 960×720、devUrl 1420、bundle.active=false
 │   ├── capabilities/default.json     core:default + dialog + clipboard-manager
 │   ├── icons/                        tauri icon 生成（含 icon.ico）
 │   └── src/
 │       ├── main.rs                   入口（release 隐藏控制台）
 │       ├── lib.rs                    命令/事件/DTO/BusyGuard/撤销快照（前端唯一系统入口）
 │       ├── registry.rs               HKCU\Software\Classes 五函数封装
-│       ├── zed.rs                    通道定义（含 key 映射）+ 安装探测 + 归属判定
+│       ├── zed.rs                    通道定义 + 安装探测 + 全量扫描 + 归属判定
 │       ├── association.rs            双源枚举 + 图标状态 + 共享影响面
 │       ├── icon.rs                   图标取值 / 批量设置删除 / 失效判定
+│       ├── iconrender.rs             图标渲染 PNG（GDI，第二处 unsafe 模块）
 │       └── refresh.rs                通知 Shell / 清缓存 / 重启 explorer
-└── target/                           cargo 产物 + ui-check（截图与校验脚本，gitignore）
+└── target/                           cargo 产物 + ui-check（校验脚本，gitignore）
 ```
 
 依赖方向（无环）：
@@ -87,6 +92,10 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 | `refresh_explorer(clearCache, restartExplorer)` | 通知 →〔清缓存〕→〔重启〕，单步失败不中断 |
 | `undo_status()` / `undo_last()` | 撤销快照查询 / 执行（快照一次性） |
 | `save_preset_file` / `load_preset_file` | 预设文件读写（限 `.json`、≤1 MiB） |
+| `scan_zed_installations()` | 全量扫描本机 Zed 安装（跨通道、多来源），供界面挑选 |
+| `preview_icon(value, size)` | 把 DefaultIcon 值渲染成 PNG data URL（失败返回 `null`，前端降级为占位方块） |
+| `read_svg_file` / `save_ico_file` | SVG 转 ICO 工具的文件读写（限 `.svg` / `.ico`，≤4 MiB） |
+| `window_minimize` / `window_toggle_maximize` / `window_close` / `start_window_drag` / `window_is_maximized` | 自绘标题栏的窗口操作；`window_close` 走 `close()` 以保留关窗拦截 |
 | `confirm_quit()` | 忙碌中退出确认后清标志 + destroy |
 | DTO | `LogLineDto` / `AssociationDto`（含 `sharedWith`、`iconState`）/ `LoadState` / `BootstrapDto` / `ProgressPayload` / `TargetDto`（含 `customIcon`）/ `UndoSnapshot` / `UndoStatusDto` |
 | `run()` | plugin 注册 / manage(AppState) / invoke_handler / on_window_event（关窗拦截） |
@@ -95,30 +104,44 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 
 | 符号 | 作用 |
 |---|---|
-| `PersistedConfig` / `CONFIG_KEY` | localStorage 配置：主题、来源模式、图标目录、逐项图标、两个开关、侧栏宽度、日志折叠 |
-| 状态 | `channel` `zedPath` `associations` `search` `selected` `icoCount` `busy` `progress` `loaded` `log` `dialog` `undoStatus` `toasts` |
+| `PersistedConfig` / `CONFIG_KEY` | localStorage 配置：主题、来源模式、图标目录、逐项图标、两个开关、侧栏宽度、日志高度、日志折叠 |
+| 状态 | `channel` `zedPath` `associations` `search` `selected` `icoCount` `busy` `progress` `loaded` `log` `dialog` `undoStatus` `iconPreviews` `installations` `scanning` `toasts` |
 | `applyLoaded()` / `load()` | 应用加载结果（顺带清理已消失的选中项）/ 重新加载 |
 | `runApply()` / `applySelected()` / `applyAll()` | 应用图标（含逐项图标），完成后自动重扫并刷新撤销状态 |
 | `removeSelected()` / `repairInvalid()` | 恢复默认 / 一键修复失效图标（复用 `apply_icons`） |
 | `runRefresh()` / `requestRefresh()` | 刷新资源管理器（勾选重启时先弹确认） |
 | `runUndo()` | 撤销上次写入 |
 | `exportPreset()` / `importPreset()` | 预设导出 / 导入 |
+| `scanZed()` / `useInstallation()` | 全量扫描 Zed 安装 / 采用扫描结果中的某一项 |
 | `pickZed()` / `pickCustomDir()` / `pickIconFor()` / `clearIconFor()` | 路径与逐项图标选择 |
 | `toggle()` / `selectAllVisible()` / `invertVisible()` / `clearSelection()` | 选择操作 |
+| `setSidebarWidth()` / `setLogHeight()` | 面板尺寸（内部经 `lib/layout.ts` 夹紧；值未变则不触发更新） |
 | `stats` | 派生统计：`total` / `selected` / `invalid` / `shared` |
 | `confirmDialog()` | 按 `dialog` 类型分派 remove / refresh / undo / quit |
 | `fail()` / `succeed()` | 统一失败出口（浮层 + 错误日志）/ 成功提示 |
+
+### `src/hooks/useSvgIco.ts`
+
+| 符号 | 作用 |
+|---|---|
+| `svgIco` | 对话框状态：open / svgPath / svgText / sizes / converting / bytes / message / error |
+| `openSvgIco()` / `closeSvgIco()` | 打开 / 关闭工具对话框 |
+| `pickSvg()` | 选择 SVG 并读取文本（`read_svg_file`） |
+| `toggleIcoSize()` | 勾选输出尺寸（改动使已有结果失效） |
+| `convertSvg()` | 光栅化并打包为 ICO（`lib/ico.ts`），记录字节数 |
+| `saveIco()` | 选择保存位置并写出 `.ico`（`save_ico_file`） |
 
 ### `src/components/`
 
 | 文件 | 导出 | 说明 |
 |---|---|---|
-| `ui.tsx` | `Card` `Pill` `Spinner` `Switch` + 图标集 | 基础件与 SVG 图标（16×16、1.5px、currentColor） |
-| `TopBar.tsx` | `TopBar` | 品牌、通道选择、主题切换、忙碌指示 |
-| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（标签 + 行内图标按钮）、`EmptyState` |
-| `IconSettingsCard.tsx` | `IconSettingsCard` | Zed 路径、来源模式（卡片式单选）、图标目录与状态 |
+| `ui.tsx` | `Card` `Pill` `Spinner` `Switch` + 图标集 | 基础件与 SVG 图标（16×16、1.5px、currentColor），含窗口控制图标 |
+| `TitleBar.tsx` | `TitleBar` | 自绘标题栏：拖拽区（双击最大化）+ 通道 + 主题 + 最小化/最大化/关闭 |
+| `AssociationList.tsx` | `AssociationList` | 搜索、列表、`Row`（图标预览 + 标签 + 行内图标按钮）、`EmptyState` |
+| `IconSettingsCard.tsx` | `IconSettingsCard` | Zed 路径（自动检测 + 扫描结果列表）、来源模式、图标目录、SVG 转 ICO 入口 |
 | `ActionCards.tsx` | `ActionsCard` `UndoCard` `MaintenanceCard` | 应用/恢复、撤销、刷新与修复 |
 | `PresetCard.tsx` | `PresetCard` | 预设导出导入 + 当前配置摘要 |
+| `SvgToIcoDialog.tsx` | `SvgToIcoDialog` | SVG 预览 + 尺寸勾选 + 转换 + 保存 |
 | `LogPanel.tsx` | `LogPanel` | 分级日志、自动吸底、折叠、右键复制单条 |
 | `ConfirmDialog.tsx` | `ConfirmDialog` | 四类确认文案（remove / refresh / undo / quit） |
 
@@ -128,9 +151,9 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 |---|---|
 | `APP_VERSION` | 版本号（与 package.json / Cargo.toml / tauri.conf.json 手动同步） |
 | `CHANNELS` / `MODES` | 通道表（含 `exeName`，供图标来源推断）/ 图标来源表 |
-| 类型 | `Association`（含 `sharedWith` `iconState`）/ `LogLine`(level) / `LoadState` / `BootstrapState` / `ProgressPayload` / `Target`(customIcon) / `UndoStatus` |
-| `api` | 11 个 invoke 封装：`bootstrap` `loadState` `scanIcoCount` `applyIcons` `removeIcons` `refreshExplorer` `undoStatus` `undoLast` `savePresetFile` `loadPresetFile` `confirmQuit` |
-| `onProgress` / `onCloseRequested` | 事件订阅，返回取消函数 |
+| 类型 | `Association`（含 `sharedWith` `iconState`）/ `LogLine`(level) / `LoadState` / `BootstrapState` / `ProgressPayload` / `Target`(customIcon) / `UndoStatus` / `ZedInstallation` |
+| `api` | 19 个 invoke 封装：`bootstrap` `loadState` `scanIcoCount` `scanZedInstallations` `previewIcon` `applyIcons` `removeIcons` `refreshExplorer` `undoStatus` `undoLast` `savePresetFile` `loadPresetFile` `readSvgFile` `saveIcoFile` `windowMinimize` `windowToggleMaximize` `windowClose` `startWindowDrag` `windowIsMaximized` `confirmQuit` |
+| `onProgress` / `onCloseRequested` / `onWindowMaximized` | 事件订阅，返回取消函数 |
 
 ### `src/styles.css` 段落
 
@@ -177,9 +200,30 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
        导入：dialog.open → invoke load_preset_file(path) → parsePreset 校验
              → 写入界面配置（不写注册表，需用户再点「应用」）
 
-关窗   用户点 × → lib.rs 的 on_window_event(CloseRequested)
+预览   列表渲染 → useAppStore 收集去重后的 DefaultIcon 值 → invoke preview_icon(value, 16)
+       → 阻塞池：SHDefExtractIconW → GetIconInfo → GetDIBits → 面积平均缩放 → PNG 编码
+       → 返回 data URL（后端按「值 + 尺寸」缓存，前端按值去重）
+       → 任一步失败返回 null，行内显示虚线占位
+
+扫描   IconSettingsCard「自动检测」→ invoke scan_zed_installations
+       → 阻塞池：卸载注册表 → 常见目录 → scoop（shim/apps）→ PATH，去重排序
+       → 界面列出候选（通道 + 路径 + 来源），点选即采用；
+         只扫到一个时自动采用；bootstrap 探测失败时也会自动采用第一个候选
+
+SVG    IconSettingsCard「SVG 转 ICO」→ SvgToIcoDialog
+       → dialog.open + invoke read_svg_file（限 .svg）→ 前端预览
+       → 勾选尺寸 → convert：SVG → Image → Canvas 光栅化 → PNG → packIco（ICONDIR + PNG 内嵌）
+       → dialog.save + invoke save_ico_file（限 .ico）
+
+关窗   用户点标题栏 × → invoke window_close → Window::close() → on_window_event(CloseRequested)
        → BusyGuard 持有中？→ prevent_close + emit close-requested → ConfirmDialog(quit)
        → 确定 → invoke confirm_quit → busy=false + window.destroy()
+
+窗口   标题栏拖拽区按下 → invoke start_window_drag（Windows 原生拖动）
+       双击标题栏 → invoke window_toggle_maximize
+       窗口 Resized → 后端 emit window-maximized → 标题栏按钮图标切换
+       边缘缩放 → 系统 ws_SIZEBOX（Tauri resizable + 无装饰时仍保留）
+       窗口 resize → 前端重新夹紧侧栏宽度与日志高度（lib/layout.ts）
 ```
 
 ---

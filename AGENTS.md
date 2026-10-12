@@ -52,7 +52,7 @@ cd src-tauri && cargo clippy --all-targets
 
 **Rust 侧（沿用 egui 版约定）：**
 
-- 中文注释、模块 `//!` 头说明职责与系统机制；`unsafe` 只应出现在 `refresh.rs`（SHChangeNotify，配 `// SAFETY：`）。
+- 中文注释、模块 `//!` 头说明职责与系统机制；**`unsafe` 只允许出现在两处**：`refresh.rs`（SHChangeNotify）与 `iconrender.rs`（GDI/Shell 取图标），每处调用点都要配 `// SAFETY：` 说明。
 - `anyhow::Result`；底层错误用 `reg_error`（`registry.rs:48`）带完整键路径；批量"失败不中断 + 末尾汇总"（`icon.rs:204`）。
 - 模块层 `println!` 带前缀 `[关联]` `[图标]` `[批量]` `[刷新]` `[警告]`；**用户可见日志走命令返回值或 `progress` 事件**，由前端渲染。别在前端不可见的地方静默吞错。
 - 纯函数测试放被测文件底部；依赖本机注册表的用例写成"存在则验证、不存在不失败"（`zed.rs:299`）。
@@ -80,6 +80,10 @@ cd src-tauri && cargo clippy --all-targets
 | 新系统图标映射 | `icon.rs::system_icon_for` 的 match 分支 + `tests::system_icon_mapping` 断言 |
 | 新的图标状态判定 | `icon.rs::inspect_icon_value` + `components/AssociationList.tsx` 的标签渲染 |
 | 新的刷新强度 / 缓存路径 | `refresh.rs` + `components/ActionCards.tsx::MaintenanceCard` + `refresh_explorer` 返回的日志行 |
+| 图标预览的渲染细节 | `iconrender.rs`（GDI 链 + PNG 编码）；PNG/zlib/base64 都是纯函数，改完跑 `cargo test iconrender` |
+| SVG → ICO 相关 | `lib/ico.ts`（光栅化与容器打包）+ `hooks/useSvgIco.ts`；改容器结构后**必须**跑 `ico_container_is_readable_by_system` |
+| 窗口控制 / 标题栏 | `lib.rs` 的 `window_*` 命令 + `components/TitleBar.tsx`；关闭务必用 `window_close`（保留关窗拦截） |
+| 面板尺寸与拖拽边界 | `lib/layout.ts`（所有拖拽与窗口 resize 都要经过 clamp） |
 | 新命令 / 新事件 | `lib.rs`（模式：async + `blocking()` + camelCase DTO），`api.ts` 加封装；涉及新插件先看 §3.7 |
 | 界面样式 | `styles.css`（变量优先）+ 对应组件 |
 | 界面结构 / 状态 / 流程 | 状态与流程改 `hooks/useAppStore.ts`；纯展示改 `components/*`；布局与快捷键改 `App.tsx` |
@@ -93,8 +97,12 @@ cd src-tauri && cargo clippy --all-targets
 2. `pnpm tauri build --debug` 后运行 exe（或 `pnpm tauri dev`）。
 3. **文档一致性**：`PROJECT_MAP.md` 的符号索引要能对上代码（已全部改用符号名，新增模块记得登记）；DESIGN 的新决策要有编号。
 4. 界面自查：`pnpm dev` + 浏览器打开，借助 `dev-mock` 快速核对布局与配色（深浅两套、窄窗口 <900px）；类名一致性可跑 `target/ui-check/check-classes.mjs`。
+   - `dev-mock` 里的 `previewIcon` 返回彩色方块，只用于确认布局；**真实图标渲染必须在真机验证**。
 5. 真机回归（**必须**，浏览器 mock 覆盖不到 Tauri 行为）：
-   - 需人工点一次：日志"复制/清空"、侧栏拖拽、日志折叠、快捷键（Ctrl+A / Ctrl+Z / Ctrl+R、Esc、Enter）。
+   - 需人工点一次：日志"复制/清空"、侧栏拖拽、日志高度拖拽、日志折叠、快捷键（Ctrl+A / Ctrl+Z / Ctrl+R、Esc、Enter）。
+   - 需人工点一次：标题栏拖动窗口、双击最大化、最大化/还原按钮、窗口边缘缩放、关闭按钮（忙碌时应弹确认）。
+   - 需人工点一次：列表行的图标预览是否显示真实图标（而非占位方块）；「自动检测」是否能扫出本机 Zed。
+   - 需人工点一次：SVG 转 ICO 全流程（选文件 → 预览 → 勾尺寸 → 转换 → 保存 → 用生成的 .ico 设为图标）。
    - 需人工点一次：任意一次"应用到选中"覆盖忙碌态（进度条 / 全禁用 / 完成后自动重扫 / 撤销按钮变可用）。
    - 需人工点一次：勾选"重启 Explorer"验证二次确认与关窗拦截链路（桌面会短暂消失，需用户同意）。
 6. 若动了写入逻辑，用 `reg query` 读回（`<ProgID>\DefaultIcon`、扩展名键、`UserChoice` 的 `ProgId`）确认值与预期格式一致；**执行撤销后同样读回**，验证恢复正确。
