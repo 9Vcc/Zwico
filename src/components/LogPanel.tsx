@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { LogLine } from "../api";
+import { t } from "../lib/i18n";
 import { IconChevron, IconCopy, IconTrash } from "./ui";
 
 export function LogPanel({
@@ -29,7 +30,8 @@ export function LogPanel({
     if (el && !collapsed) el.scrollTop = el.scrollHeight;
   }, [log, collapsed]);
 
-  const copyAll = () => void writeText(log.map((line) => line.text).join("\n"));
+  const copyAll = () =>
+    void writeText(log.map((line) => t(line.key, line.params)).join("\n"));
 
   return (
     <footer className={`logpanel${collapsed ? " logpanel--collapsed" : ""}`}>
@@ -37,26 +39,26 @@ export function LogPanel({
         <button
           type="button"
           className="logpanel__toggle"
-          data-tip={collapsed ? "展开日志面板" : "折叠日志面板"}
+          data-tip={collapsed ? t("log.expand") : t("log.collapse")}
           onClick={onToggleCollapse}
         >
           <IconChevron size={13} open={!collapsed} />
-          <span className="logpanel__title">操作日志</span>
+          <span className="logpanel__title">{t("log.title")}</span>
         </button>
         <div className="logpanel__tools">
-          <span className="counter counter--weak">{log.length} 条</span>
+          <span className="counter counter--weak">{t("log.count", [log.length])}</span>
           <button
             type="button"
             className="btn btn--mini"
-            data-tip="复制全部日志到剪贴板"
+            data-tip={t("log.copy.tip")}
             onClick={copyAll}
           >
             <IconCopy size={12} />
-            复制
+            {t("log.copy")}
           </button>
-          <button type="button" className="btn btn--mini" data-tip="清空日志区" onClick={onClear}>
+          <button type="button" className="btn btn--mini" data-tip={t("log.clear.tip")} onClick={onClear}>
             <IconTrash size={12} />
-            清空
+            {t("log.clear")}
           </button>
         </div>
       </div>
@@ -64,16 +66,16 @@ export function LogPanel({
       {collapsed ? null : (
         <div className="logpanel__body" ref={bodyRef}>
           {log.length === 0 ? (
-            <div className="logline logline--muted">暂无日志</div>
+            <div className="logline logline--muted">{t("log.empty")}</div>
           ) : (
             log.map((line, index) => (
               <div
                 key={index}
                 className={`logline logline--${line.level}`}
-                data-tip="右键查看更多操作"
+                data-tip={t("log.line.tip")}
                 onContextMenu={(event) => onLineMenu(line, event)}
               >
-                {line.text}
+                {t(line.key, line.params)}
               </div>
             ))
           )}

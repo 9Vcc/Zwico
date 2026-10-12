@@ -4,6 +4,7 @@
 
 import type { UndoStatus } from "../api";
 import { formatTimestamp } from "../lib/iconInfo";
+import { t } from "../lib/i18n";
 import {
   Card,
   IconAlert,
@@ -16,8 +17,8 @@ import {
 } from "./ui";
 
 const ACTION_LABEL: Record<string, string> = {
-  apply: "应用图标",
-  remove: "恢复默认",
+  apply: "actionLabel.apply",
+  remove: "actionLabel.remove",
 };
 
 export function ActionsCard({
@@ -45,27 +46,32 @@ export function ActionsCard({
 }) {
   const canApply = !busy && selectedCount > 0;
   const undoLabel = undoStatus.action
-    ? (ACTION_LABEL[undoStatus.action] ?? undoStatus.action)
+    ? t(ACTION_LABEL[undoStatus.action] ?? "actionLabel.other")
     : "";
   const undoNote = undoStatus.available
-    ? `可恢复到「${undoLabel}」之前（${undoStatus.count} 项 · ${formatTimestamp(undoStatus.timestamp ?? 0)}）`
-    : "每次写入前会自动记录原值，可撤销一次";
+    ? t("action.undo.note", [
+        undoLabel,
+        undoStatus.count,
+        formatTimestamp(undoStatus.timestamp ?? 0),
+      ])
+    : t("action.undo.idle");
 
   return (
-    <Card title="操作" hint={`当前来源：${modeLabel}`}>
+    <Card title={t("card.actions")} hint={t("card.actions.hint", [modeLabel])}>
       <button
         type="button"
         className="btn btn--primary btn--wide"
         disabled={!canApply}
         data-tip={
           selectedCount > 0
-            ? `把「${modeLabel}」应用到左侧勾选的 ${selectedCount} 个扩展名`
-            : "请先在左侧勾选要操作的扩展名"
+            ? t("action.applySelected.tip", [modeLabel, selectedCount])
+            : t("action.applySelected.none")
         }
         onClick={onApplySelected}
       >
         {busy ? <Spinner size={13} /> : null}
-        应用到选中{selectedCount > 0 ? `（${selectedCount}）` : ""}
+        {t("action.applySelected")}
+        {selectedCount > 0 ? ` (${selectedCount})` : ""}
       </button>
 
       <div className="btn-row">
@@ -73,19 +79,20 @@ export function ActionsCard({
           type="button"
           className="btn"
           disabled={busy || total === 0}
-          data-tip="应用到当前通道下的全部文件关联（忽略勾选状态）"
+          data-tip={t("action.applyAll.tip")}
           onClick={onApplyAll}
         >
-          应用到全部{total > 0 ? `（${total}）` : ""}
+          {t("action.applyAll")}
+          {total > 0 ? ` (${total})` : ""}
         </button>
         <button
           type="button"
           className="btn btn--danger"
           disabled={busy || selectedCount === 0}
-          data-tip="删除选中项的 DefaultIcon 注册表键，恢复系统默认图标（执行前会确认）"
+          data-tip={t("action.reset.tip")}
           onClick={onReset}
         >
-          恢复默认
+          {t("action.reset")}
         </button>
       </div>
 
@@ -97,14 +104,12 @@ export function ActionsCard({
           className="btn btn--wide"
           disabled={busy || !undoStatus.available}
           data-tip={
-            undoStatus.available
-              ? "把上次写入涉及的 DefaultIcon 恢复为写入前的值（只能撤销一次）"
-              : "暂无可撤销的记录：执行一次「应用」或「恢复默认」后即可使用"
+            undoStatus.available ? t("action.undo.tip") : t("action.undo.unavailable")
           }
           onClick={onUndo}
         >
           <IconUndo size={14} />
-          撤销上次操作
+          {t("action.undo")}
         </button>
         <p className="card__note">{undoNote}</p>
       </div>
@@ -115,11 +120,11 @@ export function ActionsCard({
         type="button"
         className="btn btn--wide btn--tool"
         disabled={busy}
-        data-tip="把 SVG 矢量图转换成多尺寸 .ico（16/24/32/48/64/128/256），可直接用于「自定义图标目录」或逐项专属图标"
+        data-tip={t("action.svgIco.tip")}
         onClick={onOpenSvgIco}
       >
         <IconShapes size={14} />
-        SVG 转 ICO 生成图标
+        {t("action.svgIco")}
       </button>
     </Card>
   );
@@ -142,26 +147,29 @@ export function MaintenanceCard({
   onRepair: () => void;
   onOpenSettings: () => void;
 }) {
-  const extras = [clearCache ? "清除图标缓存" : "", restartExplorer ? "重启 Explorer" : ""].filter(
-    Boolean,
-  );
+  const extras = [
+    clearCache ? t("refresh.clearCache") : "",
+    restartExplorer ? t("refresh.restartExplorer") : "",
+  ].filter(Boolean);
 
   return (
     <Card
-      title="刷新与修复"
-      hint="写入图标后会自动通知系统；刷新仍不生效时可用下面的动作"
-      action={invalidCount > 0 ? <Pill tone="danger">{invalidCount} 项失效</Pill> : undefined}
+      title={t("card.maintenance")}
+      hint={t("card.maintenance.hint")}
+      action={
+        invalidCount > 0 ? <Pill tone="danger">{t("maintenance.invalid", [invalidCount])}</Pill> : undefined
+      }
     >
       {invalidCount > 0 ? (
         <button
           type="button"
           className="btn btn--wide btn--attention"
           disabled={busy}
-          data-tip="按当前图标来源重设所有指向已不存在文件的关联"
+          data-tip={t("repair.tip")}
           onClick={onRepair}
         >
           <IconWand size={14} />
-          一键修复失效图标（{invalidCount}）
+          {t("repair", [invalidCount])}
         </button>
       ) : null}
 
@@ -169,30 +177,30 @@ export function MaintenanceCard({
         type="button"
         className="btn btn--primary btn--wide"
         disabled={busy}
-        data-tip="广播关联变更通知；附加动作按设置页的「刷新行为」执行"
+        data-tip={t("refresh.tip")}
         onClick={onRefresh}
       >
         <IconRefresh size={14} />
-        立即刷新资源管理器
+        {t("refresh")}
       </button>
 
       {/* 附加动作的开关已移到设置页，这里给出当前会执行什么 */}
       <p className="card__note">
-        {extras.length > 0 ? `附加动作：${extras.join(" + ")}` : "附加动作：仅广播变更通知"}
+        {extras.length > 0 ? t("refresh.extras", [extras.join(" + ")]) : t("refresh.extras.none")}
         <button
           type="button"
           className="link-btn"
-          data-tip="在设置页调整刷新行为"
+          data-tip={t("refresh.adjust.tip")}
           onClick={onOpenSettings}
         >
-          调整
+          {t("refresh.adjust")}
         </button>
       </p>
 
       {restartExplorer ? (
         <p className="inline-warn">
           <IconAlert size={13} />
-          重启 Explorer 会让桌面与任务栏短暂消失
+          {t("refresh.restart.warn")}
         </p>
       ) : null}
     </Card>

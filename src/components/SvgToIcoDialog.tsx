@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type { SvgIcoState } from "../hooks/useSvgIco";
 import { baseName } from "../lib/iconInfo";
+import { t } from "../lib/i18n";
 import { svgDataUrl } from "../lib/ico";
 import { IconDownload, IconShapes, Spinner } from "./ui";
 
@@ -37,32 +38,30 @@ export function SvgToIcoDialog({
         className="dialog dialog--wide"
         role="dialog"
         aria-modal="true"
-        aria-label="SVG 转 ICO"
+        aria-label={t("svg.title")}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="dialog__head">
           <span className="dialog__icon dialog__icon--accent">
             <IconShapes size={16} />
           </span>
-          <h2 className="dialog__title">SVG 转 ICO</h2>
+          <h2 className="dialog__title">{t("svg.title")}</h2>
         </div>
-        <p className="dialog__message">
-          把 SVG 矢量图光栅化成多尺寸 .ico，生成的文件可直接用于「自定义图标」或「专属图标」。
-        </p>
+        <p className="dialog__message">{t("svg.desc")}</p>
 
         <div className="svg-ico">
           <div className="svg-ico__preview">
             {state.svgText ? (
-              <img src={svgDataUrl(state.svgText)} alt="SVG 预览" />
+              <img src={svgDataUrl(state.svgText)} alt={t("svg.preview.alt")} />
             ) : (
-              <span className="svg-ico__placeholder">未选择文件</span>
+              <span className="svg-ico__placeholder">{t("svg.noFile")}</span>
             )}
           </div>
 
           <div className="svg-ico__side">
             <div className="row-btns">
               <button type="button" className="btn btn--mini" onClick={onPickSvg}>
-                选择 SVG…
+                {t("svg.pick")}
               </button>
               {state.svgPath ? (
                 <span className="svg-ico__file" data-tip={state.svgPath}>
@@ -71,7 +70,7 @@ export function SvgToIcoDialog({
               ) : null}
             </div>
 
-            <span className="field__label">输出尺寸（可多选，像素）</span>
+            <span className="field__label">{t("svg.sizes")}</span>
             <div className="size-grid">
               {availableSizes.map((size) => {
                 const on = state.sizes.includes(size);
@@ -79,7 +78,7 @@ export function SvgToIcoDialog({
                   <label
                     key={size}
                     className={`size-chip${on ? " size-chip--on" : ""}`}
-                    data-tip={`输出 ${size}×${size} 像素`}
+                    data-tip={t("svg.size.tip", [size])}
                   >
                     <input
                       type="checkbox"
@@ -99,27 +98,27 @@ export function SvgToIcoDialog({
 
         <div className="dialog__buttons">
           <button type="button" className="btn btn--dialog" onClick={onClose}>
-            取消
+            {t("dialog.cancel")}
           </button>
           <button
             type="button"
             className="btn btn--dialog"
             disabled={state.converting || state.sizes.length === 0 || state.svgText === ""}
-            data-tip="按所选尺寸生成图标数据"
+            data-tip={t("svg.convert.tip")}
             onClick={onConvert}
           >
             {state.converting ? <Spinner size={12} /> : null}
-            转换
+            {t("svg.convert")}
           </button>
           <button
             type="button"
             className="btn btn--primary btn--dialog"
             disabled={state.bytes === null}
-            data-tip={state.bytes ? "保存为 .ico 文件" : "请先执行转换"}
+            data-tip={state.bytes ? t("svg.save.tip") : t("svg.save.needConvert")}
             onClick={onSave}
           >
             <IconDownload size={13} />
-            保存 .ico
+            {t("svg.save")}
           </button>
         </div>
       </div>

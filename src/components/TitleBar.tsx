@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { APP_VERSION, api, CHANNELS, onWindowMaximized, type ChannelKey } from "../api";
+import { t } from "../lib/i18n";
 import { Select } from "./Select";
 import {
   IconClose,
@@ -63,25 +64,23 @@ export function TitleBar({
     void api.startWindowDrag();
   };
 
-  const current = CHANNELS.find((c) => c.key === channel);
-
   return (
     <header className="titlebar">
       <div
         className="titlebar__drag"
         onPointerDown={startDrag}
         onDoubleClick={() => void api.windowToggleMaximize()}
-        data-tip="拖动可移动窗口，双击切换最大化"
+        data-tip={t("titlebar.drag")}
       >
         <span className="brand__mark" aria-hidden>
           Z
         </span>
         <div className="brand__text">
-          <h1 className="brand__title">Zed 文件关联图标管理器</h1>
-          <p className="brand__sub">v{APP_VERSION} · 仅修改当前用户配置</p>
+          <h1 className="brand__title">{t("app.title")}</h1>
+          <p className="brand__sub">{t("app.subtitle", [APP_VERSION])}</p>
         </div>
         {busy ? (
-          <span className="busy-chip" data-tip="有任务正在执行">
+          <span className="busy-chip" data-tip={t("titlebar.busy.tip")}>
             <Spinner size={12} />
             处理中
           </span>
@@ -93,20 +92,20 @@ export function TitleBar({
           value={channel}
           options={CHANNELS.map((item) => ({
             value: item.key,
-            label: item.label,
-            hint: item.hint,
+            label: t(`channel.${item.key}`),
+            hint: t(`channel.${item.key}.hint`),
           }))}
           disabled={busy}
-          ariaLabel="Zed 发行通道"
-          dataTip={current?.hint ?? "选择实际安装的 Zed 发行通道"}
+          ariaLabel={t("titlebar.channel")}
+          dataTip={t("titlebar.channel")}
           onChange={onChannelChange}
         />
 
         <button
           type="button"
           className="btn btn--icon"
-          data-tip={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-          aria-label="切换主题"
+          data-tip={theme === "dark" ? t("titlebar.theme.toLight") : t("titlebar.theme.toDark")}
+          aria-label={t("titlebar.theme.label")}
           onClick={onToggleTheme}
         >
           <IconPalette size={15} />
@@ -115,8 +114,8 @@ export function TitleBar({
         <button
           type="button"
           className={`btn btn--icon${view === "settings" ? " btn--on" : ""}`}
-          data-tip={view === "settings" ? "返回主界面" : "打开设置（Zed 安装、刷新行为、外观、预设）"}
-          aria-label={view === "settings" ? "返回主界面" : "打开设置"}
+          data-tip={view === "settings" ? t("titlebar.settings.back") : t("titlebar.settings.open")}
+          aria-label={view === "settings" ? t("titlebar.settings.back") : t("titlebar.settings.open")}
           aria-pressed={view === "settings"}
           onClick={onToggleView}
         >
@@ -127,7 +126,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn"
-            data-tip="最小化"
+            data-tip={t("win.minimize")}
             aria-label="最小化"
             onClick={() => void api.windowMinimize()}
           >
@@ -136,7 +135,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn"
-            data-tip={maximized ? "还原" : "最大化"}
+            data-tip={maximized ? t("win.restore") : t("win.maximize")}
             aria-label={maximized ? "还原" : "最大化"}
             onClick={() => void api.windowToggleMaximize()}
           >
@@ -145,7 +144,7 @@ export function TitleBar({
           <button
             type="button"
             className="win-btn win-btn--close"
-            data-tip="关闭（有任务进行中会先确认）"
+            data-tip={t("win.close")}
             aria-label="关闭"
             onClick={() => void api.windowClose()}
           >

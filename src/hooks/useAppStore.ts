@@ -11,8 +11,6 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
   api,
-  CHANNELS,
-  MODES,
   onCloseRequested,
   onProgress,
   type Association,
@@ -25,7 +23,8 @@ import {
   type UndoStatus,
   type ZedInstallation,
 } from "../api";
-import { baseName, logToText } from "../lib/iconInfo";
+import { baseName } from "../lib/iconInfo";
+import { resolveLang, setLang, t, tEncoded, type LangPref } from "../lib/i18n";
 import { clampLogHeight, clampSidebarWidth } from "../lib/layout";
 import { buildPreset, parsePreset, presetFileName, presetToText } from "../lib/presets";
 import { useSvgIco } from "./useSvgIco";
@@ -49,6 +48,8 @@ interface PersistedConfig {
   sidebarWidth: number;
   logHeight: number;
   logCollapsed: boolean;
+  /** 界面语言：auto = 跟随系统 */
+  lang: LangPref;
 }
 
 const DEFAULT_CONFIG: PersistedConfig = {
@@ -61,6 +62,7 @@ const DEFAULT_CONFIG: PersistedConfig = {
   sidebarWidth: 288,
   logHeight: 150,
   logCollapsed: false,
+  lang: "auto",
 };
 
 /** 读取持久化配置（缺失 / 损坏时回落到默认值）
@@ -69,23 +71,28 @@ const DEFAULT_CONFIG: PersistedConfig = {
  *  若直接沿用，在小窗口下会把主区（卡片区）挤压到几乎不可见。
  */
 function loadConfig(): PersistedConfig {
+  let config = DEFAULT_CONFIG;
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    const parsed = JSON.parse(raw) as Partial<PersistedConfig>;
-    return {
-      ...DEFAULT_CONFIG,
-      ...parsed,
-      perExtension: parsed.perExtension ?? {},
-      sidebarWidth: clampSidebarWidth(
-        parsed.sidebarWidth ?? DEFAULT_CONFIG.sidebarWidth,
-        window.innerWidth,
-      ),
-      logHeight: clampLogHeight(parsed.logHeight ?? DEFAULT_CONFIG.logHeight, window.innerHeight),
-    };
+    if (raw !== null) {
+      const parsed = JSON.parse(raw) as Partial<PersistedConfig>;
+      config = {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        perExtension: parsed.perExtension ?? {},
+        sidebarWidth: clampSidebarWidth(
+          parsed.sidebarWidth ?? DEFAULT_CONFIG.sidebarWidth,
+          window.innerWidth,
+        ),
+        logHeight: clampLogHeight(parsed.logHeight ?? DEFAULT_CONFIG.logHeight, window.innerHeight),
+      };
+    }
   } catch {
-    return DEFAULT_CONFIG;
+    config = DEFAULT_CONFIG;
   }
+  // 语言必须在首帧渲染前生效：t() 读的是 i18n 模块的当前语言
+  setLang(resolveLang(config.lang));
+  return config;
 }
 
 export function useAppStore() {
@@ -101,7 +108,7 @@ export function useAppStore() {
   const [progress, setProgress] = useState<ProgressPayload | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [log, setLog] = useState<LogLine[]>([
-    { text: "正在检测 Zed 并加载文件关联列表…", level: "info" },
+    { key: "log.startLoad", level: "info" },
   ]);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [undoStatus, setUndoStatus] = useState<UndoStatus>({
@@ -129,7 +136,13 @@ export function useAppStore() {
     sidebarWidth,
     logHeight,
     logCollapsed,
+    lang,
   } = config;
+
+  // 语言：auto 时跟随系统；变化时同步给 i18n 模块并触发整树重渲染
+  useEffect(() => {
+    setLang(resolveLang(lang));
+  }, [lang]);
 
   const patchConfig = useCallback((patch: Partial<PersistedConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
@@ -162,10 +175,13 @@ export function useAppStore() {
 
   /** 统一失败出口：同时给出浮层提示与错误日志 */
   const fail = useCallback(
-    (title: string, err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      push("danger", `${title}：${detail}`);
-      setLog((prev) => [...prev, { text: `${title}：${detail}`, level: "error" }]);
+    (titleKey: string, err: unknown) => {
+      const detail = tEncoded(err instanceof Error ? err.message : String(err));
+      push("danger", t("failFormat", [t(titleKey), detail]));
+      setLog((prev) => [
+        ...prev,
+        { key: "failFormat", params: [t(titleKey), detail], level: "error" },
+      ]);
     },
     [push],
   );
@@ -194,7 +210,7 @@ export function useAppStore() {
       try {
         applyLoaded(await api.loadState(target));
       } catch (err) {
-        fail("加载关联列表失败", err);
+        fail("fail.load", err);
       } finally {
         setBusy(false);
       }
@@ -221,12 +237,12 @@ export function useAppStore() {
         setChannel(state.channel);
         applyLoaded(state);
         if (state.autoSelected) {
-          const label = CHANNELS.find((c) => c.key === state.channel)?.label ?? state.channel;
-          push("info", `已自动选择通道：${label}`, 5000);
+          const label = t(`channel.${state.channel}`);
+          push("info", t("toast.autoChannel", [label]), 5000);
         }
         await refreshUndoStatus();
       } catch (err) {
-        fail("启动加载失败", err);
+        fail("fail.startup", err);
       } finally {
         setLoaded(true);
       }
@@ -245,14 +261,14 @@ export function useAppStore() {
   const changeChannel = useCallback(
     (next: ChannelKey) => {
       if (next === channel) return;
-      const label = CHANNELS.find((c) => c.key === next)?.label ?? next;
+      const label = t(`channel.${next}`);
       setChannel(next);
       setZedPath(null);
       setAssociations([]);
       setSelected(new Set());
       setLog((prev) => [
         ...prev,
-        { text: `已切换到 ${label} 通道，正在重新加载…`, level: "info" },
+        { key: "log.channelSwitch", params: [label], level: "info" },
       ]);
       void load(next);
     },
@@ -319,17 +335,19 @@ export function useAppStore() {
   const runApply = useCallback(
     async (targets: Target[], successText: string) => {
       if (targets.length === 0) {
-        push("warn", "请先勾选要操作的扩展名");
+        push("warn", t("toast.noExtensions"));
         return;
       }
       if (mode === "app" && !zedPath) {
-        fail("无法应用", new Error("未检测到 Zed 可执行文件，请先手动指定路径"));
+        fail("fail.applyNoZed.title", new Error(t("fail.applyNoZed")));
         return;
       }
-      const modeLabel = MODES.find((m) => m.key === mode)?.label ?? mode;
+      const modeLabel = t(`mode.${mode}`);
       setBusy(true);
       setProgress({ current: 0, total: targets.length, extension: "" });
-      appendLogs([{ text: `开始应用${modeLabel}（共 ${targets.length} 个扩展名）`, level: "info" }]);
+      appendLogs([
+        { key: "log.startApply", params: [modeLabel, String(targets.length)], level: "info" },
+      ]);
       try {
         const lines = await api.applyIcons(
           targets,
@@ -340,7 +358,7 @@ export function useAppStore() {
         appendLogs(lines);
         succeed(successText);
       } catch (err) {
-        fail("应用图标失败", err);
+        fail("fail.apply", err);
       } finally {
         setBusy(false);
         setProgress(null);
@@ -352,27 +370,27 @@ export function useAppStore() {
   );
 
   const applySelected = useCallback(() => {
-    void runApply(toTargets(selectedList), `已应用到 ${selectedList.length} 个扩展名`);
+    void runApply(toTargets(selectedList), t("toast.applied", [selectedList.length]));
   }, [runApply, selectedList, toTargets]);
 
   const applyAll = useCallback(() => {
-    void runApply(toTargets(associations), `已应用到全部 ${associations.length} 个扩展名`);
+    void runApply(toTargets(associations), t("toast.appliedAll", [associations.length]));
   }, [associations, runApply, toTargets]);
 
   const removeSelected = useCallback(async () => {
     const targets = toTargets(selectedList);
     if (targets.length === 0) {
-      push("warn", "请先勾选要恢复的扩展名");
+      push("warn", t("toast.noExtensions"));
       return;
     }
     setBusy(true);
     setProgress({ current: 0, total: targets.length, extension: "" });
-    appendLogs([{ text: `开始恢复默认图标（共 ${targets.length} 个扩展名）`, level: "info" }]);
+    appendLogs([{ key: "log.startRemove", params: [String(targets.length)], level: "info" }]);
     try {
       appendLogs(await api.removeIcons(targets));
-      succeed("已恢复默认图标");
+      succeed(t("toast.removed"));
     } catch (err) {
-      fail("恢复默认失败", err);
+      fail("fail.remove", err);
     } finally {
       setBusy(false);
       setProgress(null);
@@ -385,20 +403,20 @@ export function useAppStore() {
   const repairInvalid = useCallback(() => {
     const broken = associations.filter((a) => a.iconState === "missing");
     if (broken.length === 0) {
-      push("info", "没有检测到失效的图标");
+      push("info", t("toast.repairNone"));
       return;
     }
-    void runApply(toTargets(broken), `已修复 ${broken.length} 个失效图标`);
+    void runApply(toTargets(broken), t("toast.repairDone", [broken.length]));
   }, [associations, push, runApply, toTargets]);
 
   const runRefresh = useCallback(async () => {
     setBusy(true);
-    appendLogs([{ text: "开始刷新资源管理器…", level: "info" }]);
+    appendLogs([{ key: "log.startRefresh", level: "info" }]);
     try {
       appendLogs(await api.refreshExplorer(clearCache, restartExplorer));
-      succeed("资源管理器刷新完成");
+      succeed(t("toast.refreshed"));
     } catch (err) {
-      fail("刷新失败", err);
+      fail("fail.refresh", err);
     } finally {
       setBusy(false);
     }
@@ -414,9 +432,9 @@ export function useAppStore() {
     setBusy(true);
     try {
       appendLogs(await api.undoLast());
-      succeed("已撤销上次操作");
+      succeed(t("toast.undone"));
     } catch (err) {
-      fail("撤销失败", err);
+      fail("fail.undo", err);
     } finally {
       setBusy(false);
       await load(channel);
@@ -429,24 +447,24 @@ export function useAppStore() {
     try {
       const preset = buildPreset({ mode, customDir, perExtension });
       const path = await save({
-        title: "导出图标预设",
+        title: t("dialog.exportPreset"),
         defaultPath: presetFileName(),
-        filters: [{ name: "RsIcon 预设", extensions: ["json"] }],
+        filters: [{ name: t("dialog.presetFilter"), extensions: ["json"] }],
       });
       if (typeof path !== "string") return;
       await api.savePresetFile(path, presetToText(preset));
-      succeed(`预设已导出：${baseName(path)}`);
+      succeed(t("toast.presetExported", [baseName(path)]));
     } catch (err) {
-      fail("导出预设失败", err);
+      fail("fail.exportPreset", err);
     }
   }, [customDir, fail, mode, perExtension, succeed]);
 
   const importPreset = useCallback(async () => {
     try {
       const path = await open({
-        title: "导入图标预设",
+        title: t("dialog.importPreset"),
         multiple: false,
-        filters: [{ name: "RsIcon 预设", extensions: ["json"] }],
+        filters: [{ name: t("dialog.presetFilter"), extensions: ["json"] }],
       });
       if (typeof path !== "string") return;
       const preset = parsePreset(await api.loadPresetFile(path));
@@ -455,18 +473,18 @@ export function useAppStore() {
         customDir: preset.customDir,
         perExtension: preset.perExtension,
       });
-      const modeLabel = MODES.find((m) => m.key === preset.mode)?.label ?? preset.mode;
+      const modeLabel = t(`mode.${preset.mode}`);
       push(
         "ok",
-        `已导入预设：${modeLabel}，逐项图标 ${Object.keys(preset.perExtension).length} 个，点「应用」后生效`,
+        t("toast.presetImported", [modeLabel, Object.keys(preset.perExtension).length]),
         6000,
       );
       setLog((prev) => [
         ...prev,
-        { text: `已导入预设文件：${baseName(path)}（尚未写入注册表）`, level: "info" },
+        { key: "log.presetImported", params: [baseName(path)], level: "info" },
       ]);
     } catch (err) {
-      fail("导入预设失败", err);
+      fail("fail.importPreset", err);
     }
   }, [fail, patchConfig, push]);
 
@@ -475,27 +493,30 @@ export function useAppStore() {
     try {
       const file = await open({
         multiple: false,
-        title: "选择 Zed / ZedG 可执行文件",
-        filters: [{ name: "可执行文件", extensions: ["exe"] }],
+        title: t("dialog.pickZed"),
+        filters: [{ name: t("dialog.exeFilter"), extensions: ["exe"] }],
       });
       if (typeof file === "string") {
         setZedPath(file);
-        setLog((prev) => [...prev, { text: `已手动指定 Zed 路径：${file}`, level: "info" }]);
+        setLog((prev) => [
+          ...prev,
+          { key: "log.manualZed", params: [file], level: "info" },
+        ]);
       }
     } catch (err) {
-      fail("打开文件对话框失败", err);
+      fail("fail.pickFile", err);
     }
   }, [fail]);
 
   const pickCustomDir = useCallback(async () => {
     try {
-      const dir = await open({ directory: true, title: "选择包含 <扩展名>.ico 文件的文件夹" });
+      const dir = await open({ directory: true, title: t("dialog.pickIconDir") });
       if (typeof dir === "string") {
         patchConfig({ customDir: dir });
-        setLog((prev) => [...prev, { text: `已选择图标目录：${dir}`, level: "info" }]);
+        setLog((prev) => [...prev, { key: "log.dirPicked", params: [dir], level: "info" }]);
       }
     } catch (err) {
-      fail("打开文件夹对话框失败", err);
+      fail("fail.pickDir", err);
     }
   }, [fail, patchConfig]);
 
@@ -505,15 +526,15 @@ export function useAppStore() {
       try {
         const file = await open({
           multiple: false,
-          title: `为 .${ext} 选择图标文件`,
-          filters: [{ name: "图标文件", extensions: ["ico"] }],
+          title: t("dialog.pickPerIcon", [ext]),
+          filters: [{ name: t("dialog.icoFilter"), extensions: ["ico"] }],
         });
         if (typeof file === "string") {
           patchConfig({ perExtension: { ...perExtension, [ext]: file } });
-          push("ok", `已为 .${ext} 指定图标：${baseName(file)}`);
+          push("ok", t("toast.perIconSet", [ext, baseName(file)]));
         }
       } catch (err) {
-        fail("打开文件对话框失败", err);
+        fail("fail.pickFile", err);
       }
     },
     [fail, patchConfig, perExtension, push],
@@ -524,7 +545,7 @@ export function useAppStore() {
       const next = { ...perExtension };
       delete next[ext];
       patchConfig({ perExtension: next });
-      push("info", `已清除 .${ext} 的专属图标`);
+      push("info", t("toast.perIconCleared", [ext]));
     },
     [patchConfig, perExtension, push],
   );
@@ -587,21 +608,21 @@ export function useAppStore() {
       const list = await api.scanZedInstallations();
       setInstallations(list);
       if (list.length === 0) {
-        push("warn", "没有扫描到任何 Zed 安装，可用「选择…」手动指定可执行文件");
+        push("warn", t("toast.scanNone"));
       } else if (list.length === 1) {
         const only = list[0];
         setZedPath(only.path);
-        push("ok", `已自动选用扫描到的 Zed：${only.path}`, 6000);
+        push("ok", t("toast.scanOne", [only.path]), 6000);
         setLog((prev) => [
           ...prev,
-          { text: `自动检测并选用 Zed：${only.path}（来源：${only.source}）`, level: "info" },
+          { key: "log.autoDetected", params: [only.path, t(only.source)], level: "info" },
         ]);
       } else {
-        push("info", `扫描到 ${list.length} 处 Zed 安装，请选择要使用的一个`, 6000);
+        push("info", t("toast.scanMany", [list.length]), 6000);
       }
       return list;
     } catch (err) {
-      fail("扫描 Zed 安装失败", err);
+      fail("fail.scanZed", err);
       return [];
     } finally {
       setScanning(false);
@@ -612,8 +633,8 @@ export function useAppStore() {
   const useInstallation = useCallback(
     (path: string) => {
       setZedPath(path);
-      push("ok", `已选用：${path}`, 5000);
-      setLog((prev) => [...prev, { text: `已选用 Zed：${path}`, level: "info" }]);
+      push("ok", t("toast.selected", [path]), 5000);
+      setLog((prev) => [...prev, { key: "log.useZed", params: [path], level: "info" }]);
     },
     [push],
   );
@@ -630,18 +651,18 @@ export function useAppStore() {
 
   const copyLogs = useCallback(async () => {
     try {
-      await writeText(logToText(log));
-      push("ok", "日志已复制到剪贴板");
+      await writeText(log.map((line) => t(line.key, line.params)).join("\n"));
+      push("ok", t("toast.copied"));
     } catch (err) {
-      fail("复制日志失败", err);
+      fail("fail.copyLog", err);
     }
   }, [fail, log, push]);
 
   const progressText = progress
     ? progress.extension === ""
-      ? `准备中（${progress.current}/${progress.total}）`
-      : `正在处理 .${progress.extension}（${progress.current}/${progress.total}）`
-    : "正在加载…";
+      ? t("progress.preparing", [progress.current, progress.total])
+      : t("progress.processing", [progress.extension, progress.current, progress.total])
+    : t("progress.loading");
 
   /** 侧栏宽度：经边界约束，保证内容区不会被压垮（值未变则不触发更新，避免窗口 resize 时的无谓重渲染） */
   const setSidebarWidth = useCallback((width: number) => {
@@ -704,6 +725,8 @@ export function useAppStore() {
     setMode: (value: IconMode) => patchConfig({ mode: value }),
     setCustomDir: (value: string) => patchConfig({ customDir: value }),
     setTheme: (value: Theme) => patchConfig({ theme: value }),
+    lang,
+    setLangPref: (value: LangPref) => patchConfig({ lang: value }),
     changeChannel,
     reload: () => void load(channel),
     toggle,

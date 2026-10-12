@@ -121,14 +121,14 @@ const ASSOCIATIONS: Association[] = [
 ];
 
 const LOG: LogLine[] = [
-  { text: "已自动选择通道：汉化版（ZedG）", level: "info" },
-  { text: "已检测到 Zed：D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe", level: "info" },
-  { text: "已加载 12 个文件关联", level: "info" },
-  { text: "其中 2 个关联的图标文件已失效（源文件已不存在），可一键修复", level: "warn" },
-  { text: "已为 12 个扩展名设置图标", level: "info" },
-  { text: "3 个扩展名未找到自定义图标，已回退为系统图标（md、json、css）", level: "warn" },
-  { text: "2 项失败（sh：注册表操作失败；yaml：ProgID 键已不存在）", level: "error" },
-  { text: "已通知系统刷新文件图标", level: "info" },
+  { key: "back.autoChannel", params: ["ZedG"], level: "info" },
+  { key: "back.zedDetected", params: ["D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe"], level: "info" },
+  { key: "back.assocLoaded", params: ["12"], level: "info" },
+  { key: "back.assocInvalid", params: ["2"], level: "warn" },
+  { key: "back.applied", params: ["12"], level: "info" },
+  { key: "back.fallback", params: ["3", "md, json, css"], level: "warn" },
+  { key: "back.failed", params: ["12", "2", "sh, yaml"], level: "error" },
+  { key: "back.notified", level: "info" },
 ];
 
 /** 允许用 URL 参数覆盖界面形态，便于截图与演示：
@@ -170,7 +170,7 @@ export function installDevMock(): boolean {
     loadState: async () => ({
       zedPath: "D:\\Scoop\\apps\\zedg\\current\\bin\\ZedG.exe",
       associations: ASSOCIATIONS,
-      log: [{ text: "已重新加载 12 个文件关联", level: "info" }],
+      log: [{ key: "log.reloaded", params: ["12"], level: "info" }],
     }),
     scanIcoCount: async () => 4,
     scanZedInstallations: async () => [
@@ -195,13 +195,13 @@ export function installDevMock(): boolean {
       return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
     },
     applyIcons: async () => [
-      { text: "已应用 3 个扩展名", level: "info" },
-      { text: "已通知系统刷新文件图标", level: "info" },
+      { key: "back.applied", params: ["3"], level: "info" },
+      { key: "back.notified", level: "info" },
     ],
-    removeIcons: async () => [{ text: "已恢复默认图标 3 个扩展名", level: "info" }],
+    removeIcons: async () => [{ key: "back.removed", params: ["3"], level: "info" }],
     refreshExplorer: async () => [
-      { text: "已广播文件关联变更通知", level: "info" },
-      { text: "图标缓存清理完成", level: "info" },
+      { key: "back.notifyBroadcast", level: "info" },
+      { key: "back.cacheCleared", level: "info" },
     ],
     undoStatus: async () => ({
       available: true,
@@ -209,7 +209,9 @@ export function installDevMock(): boolean {
       action: "apply",
       count: 12,
     }),
-    undoLast: async () => [{ text: "已撤销上次「应用图标」操作，恢复 12 项", level: "info" }],
+    undoLast: async () => [
+      { key: "back.undoDone", params: ["actionLabel.apply", "12"], level: "info" },
+    ],
     // 窗口操作在浏览器里没有意义，直接忽略
     windowMinimize: async () => undefined,
     windowToggleMaximize: async () => undefined,

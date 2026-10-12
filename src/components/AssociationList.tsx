@@ -2,7 +2,8 @@
 
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Association } from "../api";
-import { describeIcon } from "../lib/iconInfo";
+import { describeIcon, renderIconDescription } from "../lib/iconInfo";
+import { t } from "../lib/i18n";
 import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, Spinner } from "./ui";
 
 export function AssociationList({
@@ -49,7 +50,7 @@ export function AssociationList({
         <IconSearch size={14} />
         <input
           className="search__input"
-          placeholder="搜索扩展名…"
+          placeholder={t("list.search")}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
         />
@@ -57,7 +58,7 @@ export function AssociationList({
           <button
             type="button"
             className="search__clear"
-            data-tip="清除搜索"
+            data-tip={t("list.search.clear")}
             onClick={() => onSearch("")}
           >
             <IconClose size={12} />
@@ -65,7 +66,7 @@ export function AssociationList({
         ) : null}
       </div>
 
-      <div className="list" role="listbox" aria-multiselectable aria-label="文件关联列表">
+      <div className="list" role="listbox" aria-multiselectable aria-label={t("list.aria")}>
         {items.length > 0 ? (
           items.map((assoc) => (
             <Row
@@ -84,7 +85,7 @@ export function AssociationList({
         ) : !loaded || busy ? (
           <div className="list__hint">
             <Spinner size={13} />
-            正在加载关联列表…
+            {t("list.loading")}
           </div>
         ) : (
           <EmptyState hasAny={total > 0} />
@@ -96,26 +97,24 @@ export function AssociationList({
           <button
             type="button"
             className="btn btn--mini"
-            data-tip="选中列表中的全部扩展名"
+            data-tip={t("list.selectAll.tip")}
             onClick={onSelectAll}
           >
-            全选
+            {t("list.selectAll")}
           </button>
           <button
             type="button"
             className="btn btn--mini"
-            data-tip="翻转列表中各项的选中状态"
+            data-tip={t("list.invert.tip")}
             onClick={onInvert}
           >
-            反选
+            {t("list.invert")}
           </button>
-          <button type="button" className="btn btn--mini" data-tip="取消全部选中" onClick={onClear}>
-            清空
+          <button type="button" className="btn btn--mini" data-tip={t("list.clear.tip")} onClick={onClear}>
+            {t("list.clear")}
           </button>
         </div>
-        <span className="counter">
-          已选 <b>{selected.size}</b> / 共 {total}
-        </span>
+        <span className="counter">{t("list.counter", [selected.size, total])}</span>
       </div>
     </aside>
   );
@@ -144,14 +143,13 @@ function Row({
   onRowMenu: (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const desc = describeIcon(assoc, exeName);
+  const { label, detail } = renderIconDescription(desc, t);
   const sharedCount = assoc.sharedWith.length;
 
   const tip = [
-    `ProgID：${assoc.progId}`,
-    `图标来源：${desc.detail}`,
-    sharedCount > 0
-      ? `共享 ProgID：修改图标会同时影响 ${assoc.sharedWith.join("、")}`
-      : "",
+    t("row.tip", [assoc.progId]),
+    t("row.tip.icon", [detail]),
+    sharedCount > 0 ? t("row.tip.shared", [assoc.sharedWith.join(", ")]) : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -176,7 +174,7 @@ function Row({
         {/* 图标预览：悬停在图标上会放大显示（data-tip-icon 由 TooltipLayer 渲染） */}
         <span
           className="row__icon"
-          data-tip={desc.detail}
+          data-tip={detail}
           data-tip-icon={preview ?? undefined}
           data-tip-title={`.${assoc.extension}`}
         >
@@ -190,20 +188,20 @@ function Row({
         <span className="row__ext">.{assoc.extension}</span>
         <span className="row__tags">
           {assoc.iconState === "missing" ? (
-            <span className="tag tag--danger" data-tip={desc.detail}>
-              失效
+            <span className="tag tag--danger" data-tip={detail}>
+              {t("row.tag.missing")}
             </span>
           ) : null}
-          <span className={`tag tag--${desc.tone}`} data-tip={desc.detail}>
-            {desc.label}
+          <span className={`tag tag--${desc.tone}`} data-tip={detail}>
+            {label}
           </span>
           {sharedCount > 0 ? (
             <span
               className="tag tag--warn"
-              data-tip={`该 ProgID 被 ${sharedCount + 1} 个扩展名共用，改图标会同时影响：${assoc.sharedWith.join("、")}`}
+              data-tip={t("row.tag.shared.tip", [sharedCount + 1, assoc.sharedWith.join(", ")])}
             >
               <IconShare size={10} />
-              共享 {sharedCount}
+              {t("row.tag.shared", [sharedCount])}
             </span>
           ) : null}
         </span>
@@ -215,10 +213,10 @@ function Row({
           className="btn btn--icon btn--tiny"
           data-tip={
             perIcon
-              ? `已指定专属图标：${perIcon}\n点击可更换`
-              : "为该扩展名单独指定 .ico 图标"
+              ? t("row.pickIcon.replace", [perIcon])
+              : t("row.pickIcon")
           }
-          aria-label="指定专属图标"
+          aria-label={t("row.aria.pick")}
           onClick={() => onPickIcon(assoc.extension)}
         >
           <IconPlus size={13} />
@@ -227,8 +225,8 @@ function Row({
           <button
             type="button"
             className="btn btn--icon btn--tiny"
-            data-tip="清除该项的专属图标"
-            aria-label="清除专属图标"
+            data-tip={t("row.clearIcon")}
+            aria-label={t("row.aria.clear")}
             onClick={() => onClearIcon(assoc.extension)}
           >
             <IconClose size={12} />
@@ -243,21 +241,21 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
   if (hasAny) {
     return (
       <div className="empty">
-        <div className="empty__title">没有匹配的扩展名</div>
-        <div className="empty__sub">换个关键词，或清空搜索框看看全部关联</div>
+        <div className="empty__title">{t("list.searchEmpty.title")}</div>
+        <div className="empty__sub">{t("list.searchEmpty.sub")}</div>
       </div>
     );
   }
   return (
     <div className="empty">
-      <div className="empty__title">未找到任何文件关联</div>
-      <div className="empty__sub">当前通道下的 Zed 尚未注册文件关联</div>
+      <div className="empty__title">{t("list.empty.title")}</div>
+      <div className="empty__sub">{t("list.empty.sub")}</div>
       <ol className="empty__steps">
-        <li>确认右上角通道与实际安装的 Zed 版本一致</li>
-        <li>重新运行 Zed 安装器并勾选「注册文件关联」</li>
-        <li>或在 Zed 命令面板搜索 file associations 相关命令</li>
+        <li>{t("list.empty.step1")}</li>
+        <li>{t("list.empty.step2")}</li>
+        <li>{t("list.empty.step3")}</li>
       </ol>
-      <div className="empty__foot">注册完成后，切换通道或重启本工具即可管理图标</div>
+      <div className="empty__foot">{t("list.empty.foot")}</div>
     </div>
   );
 }

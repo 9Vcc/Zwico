@@ -7,6 +7,7 @@ import { useCallback, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import { baseName } from "../lib/iconInfo";
+import { t } from "../lib/i18n";
 import { buildIco, formatBytes, ICO_SIZES } from "../lib/ico";
 import type { ToastTone } from "./useToast";
 
@@ -55,8 +56,8 @@ export function useSvgIco(push: (tone: ToastTone, text: string, ttl?: number) =>
     try {
       const path = await open({
         multiple: false,
-        title: "选择要转换的 SVG 文件",
-        filters: [{ name: "SVG 矢量图", extensions: ["svg"] }],
+        title: t("dialog.pickSvg"),
+        filters: [{ name: t("dialog.svgFilter"), extensions: ["svg"] }],
       });
       if (typeof path !== "string") return;
       const text = await api.readSvgFile(path);
@@ -80,11 +81,11 @@ export function useSvgIco(push: (tone: ToastTone, text: string, ttl?: number) =>
   /** 执行转换 */
   const convert = useCallback(async () => {
     if (state.svgText.trim() === "") {
-      patch({ error: "请先选择 SVG 文件" });
+      patch({ error: t("svg.error.needFile") });
       return;
     }
     if (state.sizes.length === 0) {
-      patch({ error: "请至少选择一个尺寸" });
+      patch({ error: t("svg.error.needSize") });
       return;
     }
     patch({ converting: true, error: "", message: "" });
@@ -92,7 +93,7 @@ export function useSvgIco(push: (tone: ToastTone, text: string, ttl?: number) =>
       const bytes = await buildIco(state.svgText, state.sizes);
       patch({
         bytes,
-        message: `已生成 ${state.sizes.length} 个尺寸，共 ${formatBytes(bytes.length)}`,
+        message: t("svg.message.done", [state.sizes.length, formatBytes(bytes.length)]),
       });
     } catch (err) {
       patch({
@@ -107,7 +108,7 @@ export function useSvgIco(push: (tone: ToastTone, text: string, ttl?: number) =>
   /** 保存为 .ico */
   const saveIco = useCallback(async () => {
     if (!state.bytes) {
-      patch({ error: "请先执行转换" });
+      patch({ error: t("svg.error.save") });
       return;
     }
     try {
@@ -115,9 +116,9 @@ export function useSvgIco(push: (tone: ToastTone, text: string, ttl?: number) =>
         ? `${baseName(state.svgPath).replace(/\.svg$/i, "")}.ico`
         : "icon.ico";
       const path = await save({
-        title: "保存为 ICO 文件",
+        title: t("dialog.saveIco"),
         defaultPath: suggested,
-        filters: [{ name: "Windows 图标", extensions: ["ico"] }],
+        filters: [{ name: t("dialog.icoFilterName"), extensions: ["ico"] }],
       });
       if (typeof path !== "string") return;
       await api.saveIcoFile(path, state.bytes);

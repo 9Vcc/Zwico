@@ -3,17 +3,21 @@
 // 解析规则与后端 src-tauri/src/icon.rs::parse_icon_value 保持一致，
 // 但这里只做**展示推断**，不回写任何数据。
 
-import type { Association, ChannelKey, LogLine } from "../api";
+import type { Association, ChannelKey } from "../api";
 import { CHANNELS } from "../api";
 
 export type Tone = "ok" | "info" | "warn" | "danger" | "muted";
 
+/** 图标来源描述（i18n：label/detail 以 key 形式返回，由组件用 t() 渲染） */
 export interface IconDescription {
-  /** 徽标文案 */
-  label: string;
+  labelKey: string;
+  labelParams?: string[];
   tone: Tone;
-  /** 悬停说明（含原始路径或资源编号） */
-  detail: string;
+  /** 需要翻译的详情 */
+  detailKey?: string;
+  detailParams?: string[];
+  /** 无需翻译的详情（如文件路径，原样显示） */
+  detailText?: string;
 }
 
 /** 解析 `"<路径>",<索引>` / `imageres.dll,-102` / 裸路径 */
@@ -58,46 +62,58 @@ export function describeIcon(assoc: Association, exeName: string): IconDescripti
   const { file, index } = parseIconValue(raw);
 
   if (!assoc.hasDefaultIcon || raw === "") {
-    return {
-      label: "系统默认",
-      tone: "muted",
-      detail: "未设置 DefaultIcon，由资源管理器自行决定图标",
-    };
+    return { labelKey: "icon.none", tone: "muted", detailKey: "icon.none.detail" };
   }
 
   if (assoc.iconState === "missing") {
     return {
-      label: "图标失效",
+      labelKey: "icon.missing",
       tone: "danger",
-      detail: `指向的图标文件已不存在：${file}`,
+      detailKey: "icon.missing.detail",
+      detailParams: [file],
     };
   }
 
   const name = baseName(file).toLowerCase();
   if (name === "imageres.dll") {
     return {
-      label: "系统图标",
+      labelKey: "icon.system",
       tone: "info",
-      detail: `Windows 内置图标资源 imageres.dll${index === null ? "" : `,${index}`}`,
+      detailKey: "icon.system.detail",
+      detailParams: [index === null ? "" : `,${index}`],
     };
   }
   if (name === exeName.toLowerCase()) {
-    return { label: "Zed 应用图标", tone: "ok", detail: file };
+    return { labelKey: "icon.app", tone: "ok", detailText: file };
   }
   if (name.endsWith(".ico")) {
-    return { label: name, tone: "ok", detail: file };
+    return {
+      labelKey: "icon.custom",
+      labelParams: [name],
+      tone: "ok",
+      detailText: file,
+    };
   }
-  return { label: baseName(file) || "未知来源", tone: "warn", detail: raw };
+  return { labelKey: "icon.unknown", tone: "warn", detailText: raw };
+}
+
+/** 把描述渲染成可显示文本（需要 i18n 的 t 函数） */
+export function renderIconDescription(
+  desc: IconDescription,
+  translate: (key: string, params?: (string | number)[]) => string,
+): { label: string; detail: string } {
+  return {
+    label: translate(desc.labelKey, desc.labelParams),
+    detail:
+      desc.detailKey !== undefined
+        ? translate(desc.detailKey, desc.detailParams)
+        : (desc.detailText ?? ""),
+  };
 }
 
 /** Unix 秒 → 本地时间字符串 */
 export function formatTimestamp(seconds: number): string {
   return new Date(seconds * 1000).toLocaleString("zh-CN", { hour12: false });
-}
-
-/** 日志行 → 纯文本（复制用） */
-export function logToText(lines: LogLine[]): string {
-  return lines.map((line) => line.text).join("\n");
 }
 
 /** 生成文件名用的时间戳后缀（YYYYMMDD-HHmm） */

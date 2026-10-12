@@ -8,7 +8,7 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { MODES, type Association, type LogLine } from "./api";
+import { type Association, type LogLine } from "./api";
 import { ActionsCard, MaintenanceCard } from "./components/ActionCards";
 import { AssociationList } from "./components/AssociationList";
 import { ConfirmDialog } from "./components/ConfirmDialog";
@@ -23,10 +23,11 @@ import { IconAlert, IconWand } from "./components/ui";
 import { useAppStore } from "./hooks/useAppStore";
 import { ToastStack } from "./hooks/useToast";
 import { channelExeName } from "./lib/iconInfo";
+import { t } from "./lib/i18n";
 
 export default function App() {
   const store = useAppStore();
-  const modeLabel = MODES.find((m) => m.key === store.mode)?.label ?? store.mode;
+  const modeLabel = t(`mode.${store.mode}`);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth,
@@ -59,28 +60,28 @@ export default function App() {
       y: event.clientY,
       items: [
         {
-          label: store.selected.has(assoc.extension) ? "取消选中" : "选中该扩展名",
+          label: t(store.selected.has(assoc.extension) ? "row.menu.untoggle" : "row.menu.toggle"),
           onSelect: () => store.toggle(assoc.extension),
         },
         { separator: true },
         {
-          label: "指定专属图标…",
-          hint: hasPerIcon ? "将覆盖当前" : undefined,
+          label: t("row.menu.pick"),
+          hint: hasPerIcon ? t("row.menu.pick.replace") : undefined,
           onSelect: () => void store.pickIconFor(assoc.extension),
         },
         {
-          label: "清除专属图标",
+          label: t("row.menu.clear"),
           disabled: !hasPerIcon,
           onSelect: () => store.clearIconFor(assoc.extension),
         },
         { separator: true },
         {
-          label: "复制 ProgID",
+          label: t("row.menu.copyProgId"),
           hint: assoc.progId,
           onSelect: () => void writeText(assoc.progId),
         },
         {
-          label: "复制当前图标值",
+          label: t("row.menu.copyIcon"),
           disabled: assoc.currentIcon === null,
           onSelect: () => void writeText(assoc.currentIcon ?? ""),
         },
@@ -95,13 +96,16 @@ export default function App() {
       x: event.clientX,
       y: event.clientY,
       items: [
-        { label: "复制本条日志", onSelect: () => void writeText(line.text) },
+        { label: t("log.menu.copyOne"), onSelect: () => void writeText(t(line.key, line.params)) },
         {
-          label: "复制全部日志",
-          onSelect: () => void writeText(storeRef.current.log.map((item) => item.text).join("\n")),
+          label: t("log.menu.copyAll"),
+          onSelect: () =>
+            void writeText(
+              storeRef.current.log.map((item) => t(item.key, item.params)).join("\n"),
+            ),
         },
         { separator: true },
-        { label: "清空日志", danger: true, onSelect: () => storeRef.current.clearLogs() },
+        { label: t("log.menu.clear"), danger: true, onSelect: () => storeRef.current.clearLogs() },
       ],
     });
   };
@@ -218,6 +222,7 @@ export default function App() {
       {store.view === "settings" ? (
         <SettingsPage
           theme={store.theme}
+          lang={store.lang}
           logCollapsed={store.logCollapsed}
           sidebarWidth={store.sidebarWidth}
           logHeight={store.logHeight}
@@ -231,6 +236,7 @@ export default function App() {
           viewport={viewport}
           onBack={() => store.setView("main")}
           onThemeChange={store.setTheme}
+          onLangChange={store.setLangPref}
           onToggleLogCollapsed={store.toggleLogCollapsed}
           onResetSidebar={() => store.setSidebarWidth(288)}
           onResetLogHeight={() => store.setLogHeight(150)}

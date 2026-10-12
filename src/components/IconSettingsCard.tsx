@@ -5,6 +5,7 @@
 
 import { MODES, type IconMode } from "../api";
 import { baseName } from "../lib/iconInfo";
+import { t } from "../lib/i18n";
 import { Card, IconFolder, Pill } from "./ui";
 
 export function IconSettingsCard({
@@ -31,39 +32,39 @@ export function IconSettingsCard({
   onOpenSettings: () => void;
 }) {
   return (
-    <Card title="图标设置" hint="先选图标来源，再到「操作」中应用到左侧勾选的扩展名">
+    <Card title={t("card.icons")} hint={t("card.icons.hint")}>
       <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
         <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
-        <span className="path__text">{zedPath ? baseName(zedPath) : "未检测到 Zed"}</span>
+        <span className="path__text">{zedPath ? baseName(zedPath) : t("zed.notFound")}</span>
         <button
           type="button"
           className="path__link"
-          data-tip="在设置页中重新检测或手动指定可执行文件"
+          data-tip={t("zed.manage.tip")}
           onClick={onOpenSettings}
         >
-          管理
+          {t("zed.manage")}
         </button>
       </div>
 
       <div className="field">
-        <span className="field__label">图标来源</span>
+        <span className="field__label">{t("field.iconSource")}</span>
         <div className="options">
           {MODES.map((item) => {
-            const needsZed = item.key === "app" && !zedPath;
+            const needsZed = item === "app" && !zedPath;
             return (
               <button
-                key={item.key}
+                key={item}
                 type="button"
-                className={`option${mode === item.key ? " option--on" : ""}`}
-                title={needsZed ? "需要先在设置中指定 Zed 可执行文件" : item.hint}
+                className={`option${mode === item ? " option--on" : ""}`}
+                title={needsZed ? t("mode.needsZed") : t(`mode.${item}.hint`)}
                 disabled={disabled || needsZed}
-                aria-pressed={mode === item.key}
-                onClick={() => onModeChange(item.key)}
+                aria-pressed={mode === item}
+                onClick={() => onModeChange(item)}
               >
                 <span className="option__radio" aria-hidden />
                 <span className="option__text">
-                  <span className="option__label">{item.label}</span>
-                  <span className="option__hint">{item.hint}</span>
+                  <span className="option__label">{t(`mode.${item}`)}</span>
+                  <span className="option__hint">{t(`mode.${item}.hint`)}</span>
                 </span>
               </button>
             );
@@ -74,40 +75,40 @@ export function IconSettingsCard({
       {mode === "custom" ? (
         <div className="field field--sub">
           <div className="field__head">
-            <span className="field__label">图标目录</span>
+            <span className="field__label">{t("field.iconDir")}</span>
             <button
               type="button"
               className="btn btn--mini"
-              title="选择包含 <扩展名>.ico 文件的文件夹"
+              data-tip={t("iconDir.browse.tip")}
               onClick={onPickCustomDir}
             >
               <IconFolder size={12} />
-              浏览…
+              {t("iconDir.browse")}
             </button>
           </div>
           <input
             className="input"
-            placeholder="包含 <扩展名>.ico 文件的目录"
+            placeholder={t("iconDir.placeholder")}
             value={customDir}
             onChange={(e) => onCustomDirChange(e.target.value)}
           />
           <div className="field__status">
             {icoCount === null ? (
               customDir.trim() === "" ? (
-                <Pill tone="muted">未设置目录，将回退系统图标</Pill>
+                <Pill tone="muted">{t("iconDir.none")}</Pill>
               ) : (
-                <Pill tone="danger" title="目录不存在或无法读取">
-                  目录不可读
+                <Pill tone="danger" title={t("iconDir.unreadable.tip")}>
+                  {t("iconDir.unreadable")}
                 </Pill>
               )
             ) : icoCount > 0 ? (
-              <Pill tone="ok">{icoCount} 个 .ico 可用</Pill>
+              <Pill tone="ok">{t("iconDir.count", [icoCount])}</Pill>
             ) : (
-              <Pill tone="warn">目录中没有 .ico 文件</Pill>
+              <Pill tone="warn">{t("iconDir.empty")}</Pill>
             )}
             {perExtensionCount > 0 ? (
-              <Pill tone="info" title="这些扩展名使用单独指定的图标，不受上面的目录影响">
-                {perExtensionCount} 项专属图标
+              <Pill tone="info" title={t("iconDir.perItem.tip")}>
+                {t("iconDir.perItem", [perExtensionCount])}
               </Pill>
             ) : null}
           </div>

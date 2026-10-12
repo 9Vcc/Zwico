@@ -11,38 +11,18 @@ export const APP_VERSION = "0.1.0";
 
 export type ChannelKey = "stable" | "preview" | "nightly" | "zedg";
 
-/** 通道表（label 用于展示，exeName 用于在客户端推断「Zed 应用图标」来源） */
-export const CHANNELS: { key: ChannelKey; label: string; hint: string; exeName: string }[] = [
-  { key: "stable", label: "稳定版", hint: "Zed 正式发布通道", exeName: "zed.exe" },
-  { key: "preview", label: "预览版", hint: "Zed Preview 通道", exeName: "Zed Preview.exe" },
-  { key: "nightly", label: "每夜版", hint: "Zed Nightly 每日构建", exeName: "Zed Nightly.exe" },
-  {
-    key: "zedg",
-    label: "汉化版（ZedG）",
-    hint: "Zed 中文社区版，常见于 scoop 安装",
-    exeName: "ZedG.exe",
-  },
+/** 通道表（label/hint 由 i18n 的 `channel.<key>` / `channel.<key>.hint` 提供） */
+export const CHANNELS: { key: ChannelKey; exeName: string }[] = [
+  { key: "stable", exeName: "zed.exe" },
+  { key: "preview", exeName: "Zed Preview.exe" },
+  { key: "nightly", exeName: "Zed Nightly.exe" },
+  { key: "zedg", exeName: "ZedG.exe" },
 ];
 
 export type IconMode = "system" | "app" | "custom";
 
-export const MODES: { key: IconMode; label: string; hint: string }[] = [
-  {
-    key: "system",
-    label: "系统内置图标",
-    hint: "按扩展名类型映射到 Windows 内置图标：代码 / 文本、HTML、XML、图片、批处理等（推荐）",
-  },
-  {
-    key: "app",
-    label: "Zed 应用图标",
-    hint: "统一使用 Zed 主程序自带的图标（可执行文件的第一个图标）",
-  },
-  {
-    key: "custom",
-    label: "自定义图标目录",
-    hint: "在图标目录中查找 <扩展名>.ico（如 py.ico），缺失的扩展名回退系统图标并列出提示",
-  },
-];
+/** 图标来源模式（label/hint 由 i18n 的 `mode.<key>` / `mode.<key>.hint` 提供） */
+export const MODES: IconMode[] = ["system", "app", "custom"];
 
 /** DefaultIcon 的可达性：none=未设置 / valid=可达 / missing=指向的文件已不存在 */
 export type IconState = "none" | "valid" | "missing";
@@ -61,8 +41,10 @@ export interface Association {
 
 export type LogLevel = "info" | "warn" | "error";
 
+/** 日志行：后端只回 key + 参数，由前端按当前语言渲染 */
 export interface LogLine {
-  text: string;
+  key: string;
+  params?: string[];
   level: LogLevel;
 }
 
