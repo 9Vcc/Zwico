@@ -3,9 +3,10 @@
 // 分组：外观与布局（含语言）/ Zed 安装 / 刷新行为 / 配置与数据 / 快捷键 / 关于
 // 全部文案走 i18n（t()），语言切换后随 store.lang 变化重渲染。
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { APP_VERSION, CHANNELS, type AppRegistration, type ExtStatus, type ZedInstallation } from "../api";
+import { appVersion } from "../lib/appVersion";
 import { baseName } from "../lib/iconInfo";
 import { allPresetExtensions, EXT_PATTERN } from "../lib/presets";
 import { t, type LangPref } from "../lib/i18n";
@@ -129,6 +130,11 @@ export function SettingsPage({
 }) {
   const [customInput, setCustomInput] = useState("");
   const [customHint, setCustomHint] = useState("");
+  // 版本号：运行时读 tauri.conf.json，dev-mock 回退构建期注入值（见 lib/appVersion.ts）
+  const [versionText, setVersionText] = useState(APP_VERSION);
+  useEffect(() => {
+    void appVersion().then(setVersionText);
+  }, []);
 
   /** 添加自定义扩展名：支持逗号/空格分隔，非法项单独提示 */
   const addCustom = () => {
@@ -174,7 +180,7 @@ export function SettingsPage({
           {t("settings.back")}
         </button>
         <h2 className="settings__title">{t("settings.title")}</h2>
-        <span className="counter counter--weak">v{APP_VERSION}</span>
+        <span className="counter counter--weak">v{versionText}</span>
       </div>
 
       <div className="settings__grid">
@@ -504,7 +510,7 @@ export function SettingsPage({
             <div className="about">
               <div className="about__row">
                 <span>{t("about.version")}</span>
-                <span>v{APP_VERSION}</span>
+                <span>v{versionText}</span>
               </div>
               <div className="about__row">
                 <span>{t("about.layout")}</span>

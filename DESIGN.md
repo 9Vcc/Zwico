@@ -420,6 +420,23 @@ apply 汇总提示用户到系统设置重新设为默认。
 - 插件无面向 JS 的 API，`capabilities/default.json` 无需加权限，也不引入 npm 依赖；
 - 回调收到的 `argv` / `cwd` 暂不使用，后续做「关联文件唤起并打开」时可在此接收参数。
 
+### D43 · 版本号单一数据源与覆盖安装保护
+
+**版本号**：旧实现是 `api.ts` 硬编码 `APP_VERSION` 常量，注释要求"与三处配置手动同步"，
+0.0.1 → 0.0.2 升版时实际漏改（标题栏与关于页一直显示 0.0.1）。改为：
+1. **运行时 `getVersion()`**（`lib/appVersion.ts`，结果缓存）——读 tauri.conf.json 的
+   version，与 release.yml 打 tag、安装包命名同源，UI 永远等于安装包版本；
+2. 回退值 `__APP_VERSION__` 由 vite 构建期从 package.json 注入（`vite.config.ts` define），
+   仅在无 Tauri 运行时的 dev-mock 浏览器预览中使用。
+现版本号零手动同步；升级仍需改 `tauri.conf.json` + `package.json` + `Cargo.toml`（见 D42 相关流程）。
+
+**覆盖安装不可用**：本应用关窗即隐藏托盘常驻（D39），覆盖安装时旧实例往往还在运行；
+NSIS 覆写被占用的 `Zwico.exe` 报 `ERROR_SHARING_VIOLATION`，安装中途失败 —— 卸载器
+已被删、新 exe 未写入、旧 exe 还在跑，目录半新半旧。模板自带的 `CheckIfAppIsRunning`
+依赖用户点确认弹窗且只按当前 exe 名查杀，不够可靠。修复：`src-tauri/nsis/hooks.nsh`
+（经 `installerHooks` 接入）在 `NSIS_HOOK_PREINSTALL` / `PREUNINSTALL` 用
+`taskkill /F /T` 强制结束本应用全部进程（含历史二进制名），复制文件前解除文件占用。
+
 ---
 
 ## 5. 已知限制

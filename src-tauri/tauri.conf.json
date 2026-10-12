@@ -47,7 +47,8 @@
           "SimpChinese",
           "English"
         ],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "./nsis/hooks.nsh"
       }
     }
   }

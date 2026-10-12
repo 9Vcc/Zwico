@@ -27,6 +27,7 @@ RsIcon-tauri/
 │   │   ├── useSvgIco.ts              SVG 转 ICO 工具的状态与动作
 │   │   └── useToast.tsx              浮层提示（useToasts + ToastStack）
 │   ├── lib/
+│   │   ├── appVersion.ts             应用版本号统一读取（getVersion 优先，构建期注入回退）
 │   │   ├── i18n.ts                   中英字典、t() / detectLang() / tEncoded()
 │   │   ├── iconInfo.ts               DefaultIcon 解析、图标来源推断、格式化
 │   │   ├── ico.ts                    SVG 光栅化与 ICO 打包
@@ -158,11 +159,21 @@ App.tsx ─ components/* ─ useAppStore ─ lib/*
 
 | 符号 | 作用 |
 |---|---|
-| `APP_VERSION` | 版本号（与 package.json / Cargo.toml / tauri.conf.json 手动同步） |
+| `APP_VERSION` | 版本号回退值（vite 构建期从 package.json 注入 `__APP_VERSION__`；打包运行时走 `lib/appVersion.ts`） |
 | `CHANNELS` / `MODES` | 通道表（含 `exeName`，供图标来源推断）/ 图标来源表 |
 | 类型 | `Association`（含 `sharedWith` `iconState`）/ `LogLine`(level) / `LoadState` / `BootstrapState` / `ProgressPayload` / `Target`(customIcon) / `UndoStatus` / `ZedInstallation` |
 | `api` | 20 个 invoke 封装：`bootstrap` `loadState` `scanIcoCount` `scanZedInstallations` `previewIcon` `applyIcons` `removeIcons` `refreshExplorer` `undoStatus` `undoLast` `savePresetFile` `loadPresetFile` `readSvgFile` `saveIcoFile` `windowMinimize` `windowToggleMaximize` `windowClose` `startWindowDrag` `windowIsMaximized` `confirmQuit` |
 | `onProgress` / `onCloseRequested` / `onWindowMaximized` | 事件订阅，返回取消函数 |
+
+### `src/lib/appVersion.ts`
+
+| 符号 | 作用 |
+|---|---|
+| `appVersion()` | 版本号统一读取：`getVersion()`（tauri.conf.json）优先，无 Tauri 运行时回退 `APP_VERSION`；进程内缓存 |
+
+### `src-tauri/nsis/hooks.nsh`
+
+NSIS 安装钩子（`tauri.conf.json` `installerHooks` 接入）：`PREINSTALL` / `PREUNINSTALL` 强制结束运行中的本应用（含历史二进制名），防止覆盖安装因 exe 被占用而中途失败（DESIGN D43）。
 
 ### `src/styles.css` 段落
 

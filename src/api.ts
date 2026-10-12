@@ -6,8 +6,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-/** 与 package.json / Cargo.toml / tauri.conf.json 的版本保持一致 */
-export const APP_VERSION = "0.0.1";
+/** 版本号回退值：构建期由 vite 从 package.json 注入（见 vite.config.ts 的 define）。
+ *  打包运行时 UI 一律走 lib/appVersion.ts 的 appVersion()——以 tauri.conf.json
+ *  的 version 为准（release.yml 发布流水线的唯一版本来源），不再手动同步。 */
+export const APP_VERSION = __APP_VERSION__;
 
 export type ChannelKey = "stable" | "preview" | "nightly" | "zedg";
 

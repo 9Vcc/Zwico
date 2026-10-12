@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { APP_VERSION, api, CHANNELS, onWindowMaximized, type ChannelKey } from "../api";
+import { appVersion } from "../lib/appVersion";
 import { t } from "../lib/i18n";
 import { Select } from "./Select";
 import {
@@ -59,6 +60,12 @@ export function TitleBar({
     };
   }, []);
 
+  // 版本号：运行时读 tauri.conf.json（打包后与安装包一致），dev-mock 回退构建期注入值
+  const [versionText, setVersionText] = useState(APP_VERSION);
+  useEffect(() => {
+    void appVersion().then(setVersionText);
+  }, []);
+
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     void api.startWindowDrag();
@@ -77,7 +84,7 @@ export function TitleBar({
         </span>
         <div className="brand__text">
           <h1 className="brand__title">{t("app.title")}</h1>
-          <p className="brand__sub">{t("app.subtitle", [APP_VERSION])}</p>
+          <p className="brand__sub">{t("app.subtitle", [versionText])}</p>
         </div>
         {busy ? (
           <span className="busy-chip" data-tip={t("titlebar.busy.tip")}>
