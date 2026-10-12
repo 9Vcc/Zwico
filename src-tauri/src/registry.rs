@@ -149,10 +149,12 @@ pub fn get_named_value(path: &str, name: &str) -> Result<Option<String>> {
 }
 
 /// 删除命名值（幂等：值不存在时同样成功）
+///
+/// 注意必须用 `create`（自带写权限）打开 —— `open` 默认只给读权限，
+/// 在只读句柄上删值会得到 ERROR_ACCESS_DENIED（实测踩坑）。
 pub fn remove_named_value(path: &str, name: &str) -> Result<()> {
-    let key = match CURRENT_USER.open(path) {
+    let key = match CURRENT_USER.create(path) {
         Ok(key) => key,
-        Err(err) if is_not_found(&err) => return Ok(()),
         Err(err) => return Err(reg_error(path, err)),
     };
     match key.remove_value(name) {

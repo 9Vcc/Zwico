@@ -228,7 +228,7 @@ fn find_from_scoop(channel: Channel) -> Option<PathBuf> {
 
     // 1. 解析 PATH 中的 scoop shim（支持自定义根目录，如 D:\Scoop）
     if let Some(path) = find_from_scoop_shim(app) {
-        return Some(path);
+        return Some(prefer_gui_exe(channel, path));
     }
 
     // 2. 默认根目录：%USERPROFILE%\scoop\apps\<包名>\current\[bin\]<exe>
@@ -238,8 +238,11 @@ fn find_from_scoop(channel: Channel) -> Option<PathBuf> {
             .join("apps")
             .join(app)
             .join("current");
-        // 有些包的可执行文件在 current 根，有些在 current\bin（如 ZedG）
-        for base in [current.join("bin"), current] {
+        // 有些包的可执行文件在 current 根，有些在 current\bin（如 ZedG）；
+        // **必须优先包根**：bin\ 下是命令行 shim（console 子系统，启动会闪控制台），
+        // 文件关联只能指向 GUI 主程序（实测踩坑：把 shim 写进关联导致黑窗一闪）
+        let bin = current.join("bin");
+        for base in [current, bin] {
             let exe = base.join(channel.exe_name());
             if exe.is_file() {
                 return Some(exe);
@@ -248,6 +251,29 @@ fn find_from_scoop(channel: Channel) -> Option<PathBuf> {
     }
 
     None
+}
+
+/// Scoop 的 `bin\` 目录里放的是命令行 shim（console 子系统）：用它做文件关联的
+/// 启动命令时，每次打开文件都会闪一个控制台窗口。
+///
+/// 因此当解析结果位于 `<包>\current\bin\` 时，优先改用包根目录的同名 GUI exe
+/// （ZedG 的场景：`bin\ZedG.exe` 3MB 是 CLI 启动器，包根的 `ZedG.exe` 350MB 才是编辑器）。
+fn prefer_gui_exe(channel: Channel, target: PathBuf) -> PathBuf {
+    let in_bin = target
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| name.eq_ignore_ascii_case("bin"));
+    if !in_bin {
+        return target;
+    }
+    if let Some(current) = target.parent().and_then(|parent| parent.parent()) {
+        let gui = current.join(channel.exe_name());
+        if gui.is_file() {
+            println!("[检测] scoop 解析到 shim（{}），改用包根的 GUI 程序：{}", target.display(), gui.display());
+            return gui;
+        }
+    }
+    target
 }
 
 /// 在 PATH 的各目录中查找 scoop shim 文件（`<包名>.shim`）并解析真实 exe 路径
