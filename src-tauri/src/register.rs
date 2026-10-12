@@ -221,6 +221,16 @@ pub fn register_application(
     Ok((covered, skipped))
 }
 
+/// 大小写不敏感的前缀比较（char-boundary 安全）
+///
+/// 不能用字节切片 `name[..prefix.len()]`：注册表键名可能以非 ASCII 字符开头
+/// （实测用户系统存在中文开头的键名），切片落在 UTF-8 多字节字符中间会 panic。
+/// `str::get` 在越界或非 char boundary 时返回 None，安全跳过。
+fn starts_with_ignore_case(name: &str, prefix: &str) -> bool {
+    name.get(..prefix.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+}
+
 /// 移除应用注册：清除本应用写入的全部候选条目，不影响其他程序
 pub fn unregister_application(channel: Channel) -> Result<()> {
     if channel != Channel::Zedg {
@@ -241,7 +251,7 @@ pub fn unregister_application(channel: Channel) -> Result<()> {
 
     // 4. 本应用创建的全部 ProgID 键（ZedG.*）
     for name in registry::list_subkeys("")? {
-        if name.len() > APP_NAME.len() && name[..APP_NAME.len()].eq_ignore_ascii_case(APP_NAME) {
+        if starts_with_ignore_case(&name, APP_NAME) {
             registry::delete_key(&name)?;
         }
     }
@@ -253,9 +263,7 @@ pub fn unregister_application(channel: Channel) -> Result<()> {
         }
         let open_with = format!(r"Software\Classes\{key}\OpenWithProgids");
         for name in registry::value_names(&open_with)? {
-            if name.len() > APP_NAME.len()
-                && name[..APP_NAME.len()].eq_ignore_ascii_case(APP_NAME)
-            {
+            if starts_with_ignore_case(&name, APP_NAME) {
                 registry::remove_named_value(&open_with, &name)?;
             }
         }
@@ -290,5 +298,19 @@ mod tests {
         assert_eq!(prog_id_for(Channel::Stable, "py"), "Zed.py");
         assert_eq!(prog_id_for(Channel::Zedg, ".MD"), "ZedG.md");
         assert_eq!(prog_id_for(Channel::Preview, "rs"), "ZedPreview.rs");
+    }
+
+    /// 前缀比较对非 ASCII 键名安全（回归：曾因字节切片 panic）
+    #[test]
+    fn prefix_match_is_char_boundary_safe() {
+        assert!(starts_with_ignore_case("ZedG.md", "ZedG"));
+        assert!(starts_with_ignore_case("zedg.py", "ZedG"));
+        assert!(starts_with_ignore_case("ZEDG.rs", "ZedG"));
+        // 前缀本身不完整匹配
+        assert!(!starts_with_ignore_case("Zed", "ZedG"));
+        assert!(!starts_with_ignore_case("ZedG2.md", "ZedG.md"));
+        // 非 ASCII 开头的键名（曾是 panic 源）
+        assert!(!starts_with_ignore_case("銋", "ZedG"));
+        assert!(!starts_with_ignore_case("中文键名", "ZedG"));
     }
 }
