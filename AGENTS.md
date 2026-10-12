@@ -36,7 +36,8 @@ cd src-tauri && cargo clippy --all-targets
 ## 3. 硬约束（违反即错误）
 
 1. **只写 `HKCU\Software\Classes`**。禁 HKLM / HKCR / 提权（不要加 manifest、不要 `requestedExecutionLevel`）。
-2. **绝不写 `FileExts\<扩展名>\UserChoice`**（只读，`association.rs:107`）。Windows 对该键有保护，写了要么失败要么破坏用户的默认应用设置。
+2. **绝不写 `FileExts\<扩展名>\UserChoice` 的「值」**（只读它的 `ProgId`）。Windows 对该键有 Hash 完整性保护，写值会被忽略甚至触发系统重置该扩展名的关联。
+   **唯一允许的例外：删除整个 `UserChoice` 子键**（`association.rs::clear_user_choice` → `registry::remove_absolute_tree`）—— 用于"设为默认打开方式"，让解析回退到 `Classes` 默认值。该操作**不可逆**，只能由用户在设置页显式确认后触发，且仅在 `Classes\<ext>` 已指向本通道时才执行（DESIGN D35/D37）。
 3. **注册表路径一律相对路径**，拼 `Software\Classes` 前缀只能发生在 `registry.rs:39`。已批准的例外只有 `zed.rs:143`（卸载表）与 `association.rs:107`（`FileExts`），新增例外要记入 DESIGN.md。
 4. **注册表/耗时操作必须 async + `spawn_blocking`**：统一走 `lib.rs::blocking()`，它同时统一处理 join 失败。同步命令跑在 Tauri 主线程会冻结窗口；前端 `invoke` 本身是异步的，不会阻塞渲染。
 5. **`restart_explorer` 与 `delete_key` 是破坏性/可见副作用操作**：只能由用户显式触发且必须经过确认对话框（`App.tsx:765` `DIALOG_TEXT`）。禁止出现在任何"自动流程""启动即执行""测试用例"里。
