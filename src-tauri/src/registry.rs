@@ -108,20 +108,6 @@ pub fn key_exists(path: &str) -> Result<bool> {
     }
 }
 
-/// 删除**绝对路径**下的键树（幂等）
-///
-/// 仅供已批准的例外路径使用：`FileExts\<ext>\UserChoice`
-/// —— 该键位于 `Software\Classes` 之外，见 DESIGN D37 的例外登记。
-/// 存储路径拼接与错误上下文仍然只在本模块里写一次。
-pub fn remove_absolute_tree(path: &str) -> Result<()> {
-    match CURRENT_USER.remove_tree(path) {
-        Ok(()) => Ok(()),
-        // 键已不存在：视为删除成功
-        Err(err) if is_not_found(&err) => Ok(()),
-        Err(err) => Err(anyhow!("注册表删除失败（{path}）：{err}")),
-    }
-}
-
 /// 列出指定键下的所有子键名（注册表天然按字母序返回）
 pub fn list_subkeys(path: &str) -> Result<Vec<String>> {
     let key = CURRENT_USER
