@@ -1720,6 +1720,212 @@ body {
   color: var(--ok);
 }
 
+/* ===== 设置页 ===== */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.settings__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 760px;
+}
+
+.settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 路径行内的跳转链接 */
+.path__link {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.path__link:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+/* 卡片说明里的内联链接（如「调整」） */
+.link-btn {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* 激活态的图标按钮（标题栏设置按钮）与分段按钮选中态 */
+.btn--on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.btn--on:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* 快捷键表 */
+.shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcuts__row dt {
+  flex: 0 0 104px;
+  margin: 0;
+}
+
+.shortcuts__row dd {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* 关于表 */
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.about__row {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+}
+
+.about__row > span:first-child {
+  flex: 0 0 92px;
+  color: var(--text-weak);
+}
+
+.about__row > span:last-child {
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+/* ===== 右键菜单 ===== */
+
+.ctxmenu {
+  position: fixed;
+  z-index: 100;
+  padding: 4px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
+  animation: fade-in 0.1s ease-out;
+}
+
+.ctxmenu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--stroke);
+}
+
+.ctxmenu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctxmenu__item:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.ctxmenu__item:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+
+.ctxmenu__item--danger {
+  color: var(--danger);
+}
+
+.ctxmenu__item--danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.ctxmenu__hint {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-weak);
+}
+
 /* ===== 窄窗口适配 ===== */
 
 @media (max-width: 1080px) {

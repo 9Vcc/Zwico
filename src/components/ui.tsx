@@ -244,3 +244,26 @@ export const IconPlus = ({ size }: IconProps) => (
     <path d="M3.4 8 H12.6" />
   </Svg>
 );
+
+/** 设置（齿轮） */
+export const IconGear = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <circle cx="8" cy="8" r="2.3" />
+    <path d="M8 1.8 V3.3 M8 12.7 V14.2 M1.8 8 H3.3 M12.7 8 H14.2" />
+    <path d="M3.6 3.6 L4.7 4.7 M11.3 11.3 L12.4 12.4 M12.4 3.6 L11.3 4.7 M4.7 11.3 L3.6 12.4" />
+  </Svg>
+);
+
+/** 返回 */
+export const IconBack = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M12.4 8 H3.6" />
+    <path d="M7 4.2 L3.2 8 L7 11.8" />
+  </Svg>
+);
+
+export const IconChevronDown = ({ size }: IconProps) => (
+  <Svg size={size}>
+    <path d="M4 6.2 L8 10.2 L12 6.2" />
+  </Svg>
+);

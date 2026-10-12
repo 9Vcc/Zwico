@@ -1,14 +1,11 @@
-// 图标设置卡片：Zed 路径（含自动扫描）、图标来源、自定义目录、图标工具
+// 图标设置卡片：只保留高频项（图标来源模式、自定义目录）
+//
+// Zed 可执行文件的检测与更换属于低频配置，已迁到设置页；
+// 这里只显示一行状态并提供跳转，因为「Zed 应用图标」模式的可用性依赖它。
 
-import { useEffect, useState } from "react";
-import {
-  CHANNELS,
-  MODES,
-  type IconMode,
-  type ZedInstallation,
-} from "../api";
+import { MODES, type IconMode } from "../api";
 import { baseName } from "../lib/iconInfo";
-import { Card, IconFolder, IconSearch, Pill, Spinner } from "./ui";
+import { Card, IconFolder, Pill } from "./ui";
 
 export function IconSettingsCard({
   zedPath,
@@ -17,14 +14,10 @@ export function IconSettingsCard({
   icoCount,
   perExtensionCount,
   disabled,
-  installations,
-  scanning,
-  onPickZed,
-  onScan,
-  onUseInstallation,
   onModeChange,
   onCustomDirChange,
   onPickCustomDir,
+  onOpenSettings,
 }: {
   zedPath: string | null;
   mode: IconMode;
@@ -32,79 +25,24 @@ export function IconSettingsCard({
   icoCount: number | null;
   perExtensionCount: number;
   disabled: boolean;
-  installations: ZedInstallation[];
-  scanning: boolean;
-  onPickZed: () => void;
-  onScan: () => void;
-  onUseInstallation: (path: string) => void;
   onModeChange: (mode: IconMode) => void;
   onCustomDirChange: (value: string) => void;
   onPickCustomDir: () => void;
+  onOpenSettings: () => void;
 }) {
-  const [showList, setShowList] = useState(false);
-
-  // 扫描出多个候选时自动展开列表，便于立刻挑选
-  useEffect(() => {
-    setShowList(installations.length > 1);
-  }, [installations]);
-
   return (
     <Card title="图标设置" hint="先选图标来源，再到「操作」中应用到左侧勾选的扩展名">
-      <div className="field">
-        <div className="field__head">
-          <span className="field__label">Zed 可执行文件</span>
-          <div className="row-btns">
-            <button
-              type="button"
-              className="btn btn--mini"
-              disabled={disabled || scanning}
-              data-tip="自动扫描本机所有 Zed 安装（卸载注册表 / 常见安装目录 / scoop / PATH），跨通道查找"
-              onClick={onScan}
-            >
-              {scanning ? <Spinner size={11} /> : <IconSearch size={11} />}
-              自动检测
-            </button>
-            <button
-              type="button"
-              className="btn btn--mini"
-              data-tip="手动指定 Zed / ZedG 可执行文件（适用于任何安装方式）"
-              onClick={onPickZed}
-            >
-              选择…
-            </button>
-          </div>
-        </div>
-
-        <div className={`path${zedPath ? "" : " path--warn"}`} data-tip={zedPath ?? undefined}>
-          <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
-          <span className="path__text">{zedPath ? baseName(zedPath) : "未检测到 Zed"}</span>
-          <span className="path__sub">
-            {zedPath ?? "「Zed 应用图标」模式不可用，可自动检测或手动指定"}
-          </span>
-        </div>
-
-        {showList && installations.length > 0 ? (
-          <ul className="install-list" aria-label="扫描到的 Zed 安装">
-            {installations.map((item) => {
-              const label = CHANNELS.find((c) => c.key === item.channel)?.label ?? item.channel;
-              const active = zedPath === item.path;
-              return (
-                <li key={item.path}>
-                  <button
-                    type="button"
-                    className={`install-item${active ? " install-item--on" : ""}`}
-                    data-tip={`${item.path}\n来源：${item.source}`}
-                    onClick={() => onUseInstallation(item.path)}
-                  >
-                    <span className="install-item__channel">{label}</span>
-                    <span className="install-item__path">{item.path}</span>
-                    <span className="install-item__source">{item.source}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+      <div className={`path${zedPath ? "" : " path--warn"}`} title={zedPath ?? undefined}>
+        <span className={`dot ${zedPath ? "dot--ok" : "dot--warn"}`} aria-hidden />
+        <span className="path__text">{zedPath ? baseName(zedPath) : "未检测到 Zed"}</span>
+        <button
+          type="button"
+          className="path__link"
+          data-tip="在设置页中重新检测或手动指定可执行文件"
+          onClick={onOpenSettings}
+        >
+          管理
+        </button>
       </div>
 
       <div className="field">
@@ -117,7 +55,7 @@ export function IconSettingsCard({
                 key={item.key}
                 type="button"
                 className={`option${mode === item.key ? " option--on" : ""}`}
-                data-tip={needsZed ? "需要先指定 Zed 可执行文件" : item.hint}
+                title={needsZed ? "需要先在设置中指定 Zed 可执行文件" : item.hint}
                 disabled={disabled || needsZed}
                 aria-pressed={mode === item.key}
                 onClick={() => onModeChange(item.key)}
@@ -140,7 +78,7 @@ export function IconSettingsCard({
             <button
               type="button"
               className="btn btn--mini"
-              data-tip="选择包含 <扩展名>.ico 文件的文件夹"
+              title="选择包含 <扩展名>.ico 文件的文件夹"
               onClick={onPickCustomDir}
             >
               <IconFolder size={12} />

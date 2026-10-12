@@ -1,5 +1,6 @@
 // 左侧关联列表：搜索、整行多选、图标来源标签、逐项图标入口、空状态
 
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Association } from "../api";
 import { describeIcon } from "../lib/iconInfo";
 import { IconCheck, IconClose, IconPlus, IconSearch, IconShare, Spinner } from "./ui";
@@ -21,6 +22,7 @@ export function AssociationList({
   onClear,
   onPickIcon,
   onClearIcon,
+  onRowMenu,
 }: {
   items: Association[];
   total: number;
@@ -39,6 +41,7 @@ export function AssociationList({
   onClear: () => void;
   onPickIcon: (ext: string) => void;
   onClearIcon: (ext: string) => void;
+  onRowMenu: (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   return (
     <aside className="sidebar">
@@ -75,6 +78,7 @@ export function AssociationList({
               onToggle={onToggle}
               onPickIcon={onPickIcon}
               onClearIcon={onClearIcon}
+              onRowMenu={onRowMenu}
             />
           ))
         ) : !loaded || busy ? (
@@ -126,6 +130,7 @@ function Row({
   onToggle,
   onPickIcon,
   onClearIcon,
+  onRowMenu,
 }: {
   assoc: Association;
   selected: boolean;
@@ -136,6 +141,7 @@ function Row({
   onToggle: (ext: string) => void;
   onPickIcon: (ext: string) => void;
   onClearIcon: (ext: string) => void;
+  onRowMenu: (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const desc = describeIcon(assoc, exeName);
   const sharedCount = assoc.sharedWith.length;
@@ -151,7 +157,10 @@ function Row({
     .join("\n");
 
   return (
-    <div className={`row${selected ? " row--sel" : ""}`}>
+    <div
+      className={`row${selected ? " row--sel" : ""}`}
+      onContextMenu={(event) => onRowMenu(assoc, event)}
+    >
       <button
         type="button"
         className="row__main"

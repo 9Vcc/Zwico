@@ -1,15 +1,21 @@
 // 应用外壳：把 store 的状态与动作分发给纯展示组件，
 // 并集中处理布局交互（侧栏/日志拖拽、边界夹紧）、快捷键与全局状态提示。
 
-import { useEffect, useRef } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { MODES } from "./api";
+import { useEffect, useRef, useState } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { MODES, type Association, type LogLine } from "./api";
 import { ActionsCard, MaintenanceCard } from "./components/ActionCards";
 import { AssociationList } from "./components/AssociationList";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ContextMenu, type MenuState } from "./components/ContextMenu";
 import { IconSettingsCard } from "./components/IconSettingsCard";
 import { LogPanel } from "./components/LogPanel";
-import { PresetCard } from "./components/PresetCard";
+import { SettingsPage } from "./components/SettingsPage";
 import { SvgToIcoDialog } from "./components/SvgToIcoDialog";
 import { TitleBar } from "./components/TitleBar";
 import { TooltipLayer } from "./components/Tooltip";
@@ -21,10 +27,80 @@ import { channelExeName } from "./lib/iconInfo";
 export default function App() {
   const store = useAppStore();
   const modeLabel = MODES.find((m) => m.key === store.mode)?.label ?? store.mode;
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   // store 每轮渲染都是新对象，用 ref 持有以避免反复重绑监听
   const storeRef = useRef(store);
   storeRef.current = store;
+
+  // ---------- 右键菜单 ----------
+  // 拦掉 WebView 的默认菜单（含「重新加载 / 检查」等应用里不该有的项），
+  // 输入框除外 —— 那里需要系统的粘贴/全选
+  useEffect(() => {
+    const onContext = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea")) return;
+      event.preventDefault();
+    };
+    document.addEventListener("contextmenu", onContext);
+    return () => document.removeEventListener("contextmenu", onContext);
+  }, []);
+
+  /** 列表行的右键菜单 */
+  const openRowMenu = (assoc: Association, event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const hasPerIcon = Boolean(store.perExtension[assoc.extension]);
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          label: store.selected.has(assoc.extension) ? "取消选中" : "选中该扩展名",
+          onSelect: () => store.toggle(assoc.extension),
+        },
+        { separator: true },
+        {
+          label: "指定专属图标…",
+          hint: hasPerIcon ? "将覆盖当前" : undefined,
+          onSelect: () => void store.pickIconFor(assoc.extension),
+        },
+        {
+          label: "清除专属图标",
+          disabled: !hasPerIcon,
+          onSelect: () => store.clearIconFor(assoc.extension),
+        },
+        { separator: true },
+        {
+          label: "复制 ProgID",
+          hint: assoc.progId,
+          onSelect: () => void writeText(assoc.progId),
+        },
+        {
+          label: "复制当前图标值",
+          disabled: assoc.currentIcon === null,
+          onSelect: () => void writeText(assoc.currentIcon ?? ""),
+        },
+      ],
+    });
+  };
+
+  /** 日志行的右键菜单 */
+  const openLogMenu = (line: LogLine, event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: "复制本条日志", onSelect: () => void writeText(line.text) },
+        {
+          label: "复制全部日志",
+          onSelect: () => void writeText(storeRef.current.log.map((item) => item.text).join("\n")),
+        },
+        { separator: true },
+        { label: "清空日志", danger: true, onSelect: () => storeRef.current.clearLogs() },
+      ],
+    });
+  };
 
   // ---------- 快捷键 ----------
   useEffect(() => {
@@ -128,10 +204,39 @@ export default function App() {
         channel={store.channel}
         busy={store.busy}
         theme={store.theme}
+        view={store.view}
         onChannelChange={store.changeChannel}
         onToggleTheme={() => store.setTheme(store.theme === "dark" ? "light" : "dark")}
+        onToggleView={() => store.setView(store.view === "settings" ? "main" : "settings")}
       />
 
+      {store.view === "settings" ? (
+        <SettingsPage
+          theme={store.theme}
+          logCollapsed={store.logCollapsed}
+          sidebarWidth={store.sidebarWidth}
+          logHeight={store.logHeight}
+          clearCache={store.clearCache}
+          restartExplorer={store.restartExplorer}
+          zedPath={store.zedPath}
+          installations={store.installations}
+          scanning={store.scanning}
+          perExtensionCount={Object.keys(store.perExtension).length}
+          customDir={store.customDir}
+          onBack={() => store.setView("main")}
+          onThemeChange={store.setTheme}
+          onToggleLogCollapsed={store.toggleLogCollapsed}
+          onResetSidebar={() => store.setSidebarWidth(288)}
+          onResetLogHeight={() => store.setLogHeight(150)}
+          onClearCacheChange={store.setClearCache}
+          onRestartExplorerChange={store.setRestartExplorer}
+          onScan={() => void store.scanZed()}
+          onPickZed={() => void store.pickZed()}
+          onUseInstallation={store.useInstallation}
+          onExportPreset={() => void store.exportPreset()}
+          onImportPreset={() => void store.importPreset()}
+        />
+      ) : (
       <div className="main">
         <AssociationList
           items={store.visible}
@@ -150,6 +255,7 @@ export default function App() {
           onClear={store.clearSelection}
           onPickIcon={(ext) => void store.pickIconFor(ext)}
           onClearIcon={store.clearIconFor}
+          onRowMenu={openRowMenu}
         />
 
         <div
@@ -206,14 +312,10 @@ export default function App() {
                   icoCount={store.icoCount}
                   perExtensionCount={Object.keys(store.perExtension).length}
                   disabled={store.busy}
-                  installations={store.installations}
-                  scanning={store.scanning}
-                  onPickZed={() => void store.pickZed()}
-                  onScan={() => void store.scanZed()}
-                  onUseInstallation={store.useInstallation}
                   onModeChange={store.setMode}
                   onCustomDirChange={store.setCustomDir}
                   onPickCustomDir={() => void store.pickCustomDir()}
+                  onOpenSettings={() => store.setView("settings")}
                 />
               </div>
 
@@ -236,25 +338,16 @@ export default function App() {
                   clearCache={store.clearCache}
                   restartExplorer={store.restartExplorer}
                   invalidCount={store.stats.invalid}
-                  onClearCache={store.setClearCache}
-                  onRestartExplorer={store.setRestartExplorer}
                   onRefresh={store.requestRefresh}
                   onRepair={store.repairInvalid}
-                />
-
-                <PresetCard
-                  busy={store.busy}
-                  modeLabel={modeLabel}
-                  perExtensionCount={Object.keys(store.perExtension).length}
-                  customDir={store.customDir}
-                  onExport={() => void store.exportPreset()}
-                  onImport={() => void store.importPreset()}
+                  onOpenSettings={() => store.setView("settings")}
                 />
               </div>
             </section>
           </div>
         </section>
       </div>
+      )}
 
       {store.logCollapsed ? null : (
         <div
@@ -275,6 +368,7 @@ export default function App() {
         collapsed={store.logCollapsed}
         onToggleCollapse={store.toggleLogCollapsed}
         onClear={store.clearLogs}
+        onLineMenu={openLogMenu}
       />
 
       {store.dialog !== null ? (
@@ -298,6 +392,9 @@ export default function App() {
       ) : null}
 
       <ToastStack toasts={store.toasts} onDismiss={store.dismissToast} />
+
+      {/* 右键菜单（列表行 / 日志行） */}
+      {menu !== null ? <ContextMenu menu={menu} onClose={() => setMenu(null)} /> : null}
 
       {/* 统一的自绘提示层（data-tip / data-tip-icon） */}
       <TooltipLayer />

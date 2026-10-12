@@ -1,8 +1,9 @@
-// 日志面板：分级着色、自动吸底、右键复制单条、可折叠
+// 日志面板：分级着色、自动吸底、右键菜单、可折叠
 //
-// 这里直接调用剪贴板插件（纯输出动作），是「组件保持纯展示」的唯一例外。
+// 右键菜单由外部（App）构造，这里只上报事件。
 
 import { useEffect, useRef } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { LogLine } from "../api";
 import { IconChevron, IconCopy, IconTrash } from "./ui";
@@ -12,11 +13,13 @@ export function LogPanel({
   collapsed,
   onToggleCollapse,
   onClear,
+  onLineMenu,
 }: {
   log: LogLine[];
   collapsed: boolean;
   onToggleCollapse: () => void;
   onClear: () => void;
+  onLineMenu: (line: LogLine, event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -67,11 +70,8 @@ export function LogPanel({
               <div
                 key={index}
                 className={`logline logline--${line.level}`}
-                data-tip="右键复制本条日志"
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void writeText(line.text);
-                }}
+                data-tip="右键查看更多操作"
+                onContextMenu={(event) => onLineMenu(line, event)}
               >
                 {line.text}
               </div>

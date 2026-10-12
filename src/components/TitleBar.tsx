@@ -12,6 +12,7 @@ import { APP_VERSION, api, CHANNELS, onWindowMaximized, type ChannelKey } from "
 import { Select } from "./Select";
 import {
   IconClose,
+  IconGear,
   IconMaximize,
   IconMinimize,
   IconPalette,
@@ -23,14 +24,18 @@ export function TitleBar({
   channel,
   busy,
   theme,
+  view,
   onChannelChange,
   onToggleTheme,
+  onToggleView,
 }: {
   channel: ChannelKey;
   busy: boolean;
   theme: "dark" | "light";
+  view: "main" | "settings";
   onChannelChange: (value: ChannelKey) => void;
   onToggleTheme: () => void;
+  onToggleView: () => void;
 }) {
   const [maximized, setMaximized] = useState(false);
 
@@ -105,6 +110,17 @@ export function TitleBar({
           onClick={onToggleTheme}
         >
           <IconPalette size={15} />
+        </button>
+
+        <button
+          type="button"
+          className={`btn btn--icon${view === "settings" ? " btn--on" : ""}`}
+          data-tip={view === "settings" ? "返回主界面" : "打开设置（Zed 安装、刷新行为、外观、预设）"}
+          aria-label={view === "settings" ? "返回主界面" : "打开设置"}
+          aria-pressed={view === "settings"}
+          onClick={onToggleView}
+        >
+          <IconGear size={15} />
         </button>
 
         <div className="win-controls">

@@ -13,7 +13,6 @@ import {
   IconWand,
   Pill,
   Spinner,
-  Switch,
 } from "./ui";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -131,24 +130,26 @@ export function MaintenanceCard({
   clearCache,
   restartExplorer,
   invalidCount,
-  onClearCache,
-  onRestartExplorer,
   onRefresh,
   onRepair,
+  onOpenSettings,
 }: {
   busy: boolean;
   clearCache: boolean;
   restartExplorer: boolean;
   invalidCount: number;
-  onClearCache: (value: boolean) => void;
-  onRestartExplorer: (value: boolean) => void;
   onRefresh: () => void;
   onRepair: () => void;
+  onOpenSettings: () => void;
 }) {
+  const extras = [clearCache ? "清除图标缓存" : "", restartExplorer ? "重启 Explorer" : ""].filter(
+    Boolean,
+  );
+
   return (
     <Card
       title="刷新与修复"
-      hint="写入图标后会自动通知系统；清缓存与重启 Explorer 用于图标仍未更新的情况"
+      hint="写入图标后会自动通知系统；刷新仍不生效时可用下面的动作"
       action={invalidCount > 0 ? <Pill tone="danger">{invalidCount} 项失效</Pill> : undefined}
     >
       {invalidCount > 0 ? (
@@ -168,29 +169,25 @@ export function MaintenanceCard({
         type="button"
         className="btn btn--primary btn--wide"
         disabled={busy}
-        data-tip="广播关联变更通知；按下方「刷新选项」决定是否清缓存 / 重启 Explorer"
+        data-tip="广播关联变更通知；附加动作按设置页的「刷新行为」执行"
         onClick={onRefresh}
       >
         <IconRefresh size={14} />
         立即刷新资源管理器
       </button>
 
-      {/* 两个开关是上面刷新动作的选项，用左侧竖线明确从属层级 */}
-      <div className="switch-group">
-        <span className="switch-group__label">刷新选项</span>
-        <Switch
-          checked={clearCache}
-          onChange={onClearCache}
-          label="清除图标缓存"
-          title="删除 IconCache.db 与 thumbcache_*.db，强制 Explorer 重建图标缓存"
-        />
-        <Switch
-          checked={restartExplorer}
-          onChange={onRestartExplorer}
-          label="重启 Explorer"
-          title="刷新最彻底，但桌面与任务栏会短暂消失（约 2–3 秒），执行前会二次确认"
-        />
-      </div>
+      {/* 附加动作的开关已移到设置页，这里给出当前会执行什么 */}
+      <p className="card__note">
+        {extras.length > 0 ? `附加动作：${extras.join(" + ")}` : "附加动作：仅广播变更通知"}
+        <button
+          type="button"
+          className="link-btn"
+          data-tip="在设置页调整刷新行为"
+          onClick={onOpenSettings}
+        >
+          调整
+        </button>
+      </p>
 
       {restartExplorer ? (
         <p className="inline-warn">

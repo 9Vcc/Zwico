@@ -33,6 +33,8 @@ import { useToasts } from "./useToast";
 
 export type Theme = "dark" | "light";
 export type DialogKind = "remove" | "refresh" | "quit" | "undo";
+/** 主视图：主界面 / 设置页 */
+export type AppView = "main" | "settings";
 
 const CONFIG_KEY = "rsicon-config-v1";
 
@@ -79,6 +81,7 @@ function loadConfig(): PersistedConfig {
 
 export function useAppStore() {
   const [config, setConfig] = useState<PersistedConfig>(loadConfig);
+  const [view, setView] = useState<AppView>("main");
   const [channel, setChannel] = useState<ChannelKey>("stable");
   const [zedPath, setZedPath] = useState<string | null>(null);
   const [associations, setAssociations] = useState<Association[]>([]);
@@ -640,6 +643,8 @@ export function useAppStore() {
 
   return {
     // 状态
+    view,
+    setView,
     theme,
     channel,
     zedPath,
