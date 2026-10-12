@@ -253,6 +253,7 @@ export default function App() {
           onAddWatched={store.addWatched}
           onClearWatched={store.clearWatched}
           onRegisterWatched={() => store.setDialog("register")}
+          onSetDefaultWatched={() => store.setDialog("setDefault")}
           onOpenDefaultApps={() => void store.openDefaultApps()}
         />
       ) : (

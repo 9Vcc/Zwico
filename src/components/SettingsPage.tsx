@@ -79,6 +79,7 @@ export function SettingsPage({
   onAddWatched,
   onClearWatched,
   onRegisterWatched,
+  onSetDefaultWatched,
   onOpenDefaultApps,
 }: {
   theme: "dark" | "light";
@@ -116,6 +117,7 @@ export function SettingsPage({
   onAddWatched: (exts: string[]) => void;
   onClearWatched: () => void;
   onRegisterWatched: () => void;
+  onSetDefaultWatched: () => void;
   onOpenDefaultApps: () => void;
 }) {
   const [customInput, setCustomInput] = useState("");
@@ -419,6 +421,22 @@ export function SettingsPage({
                   <IconFolder size={13} />
                   {t("watch.openSettings")}
                 </button>
+
+                {/* 不跳系统设置的替代路径：删除 UserChoice 让 Zed 生效（不可逆） */}
+                <button
+                  type="button"
+                  className="btn btn--wide btn--attention"
+                  disabled={watched.length === 0}
+                  data-tip={t("watch.setDefault.tip")}
+                  onClick={onSetDefaultWatched}
+                >
+                  <IconCheck size={14} />
+                  {t("watch.setDefault", [watched.length])}
+                </button>
+                <p className="inline-warn">
+                  <IconAlert size={13} />
+                  {t("watch.setDefault.warn")}
+                </p>
               </div>
             ) : null}
 

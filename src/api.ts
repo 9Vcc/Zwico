@@ -119,6 +119,9 @@ export const api = {
   /** 为扩展名建立 Zed 关联（改变打开方式，需用户显式触发） */
   registerExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
     invoke<LogLine[]>("register_extensions", { channel, extensions, zedPath }),
+  /** 把扩展名设为 Zed 的默认打开方式（删除其 UserChoice 覆盖，不可逆） */
+  setDefaultExtensions: (channel: ChannelKey, extensions: string[], zedPath: string) =>
+    invoke<LogLine[]>("set_default_extensions", { channel, extensions, zedPath }),
   /** 检查扩展名的关联状态（只读） */
   inspectExtensions: (channel: ChannelKey, extensions: string[]) =>
     invoke<ExtStatus[]>("inspect_extensions", { channel, extensions }),
