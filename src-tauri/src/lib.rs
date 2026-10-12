@@ -1,19 +1,22 @@
 //! RsIcon（Tauri 版）后端入口：把「Zed 文件关联图标管理」暴露为 Tauri commands
 //!
 //! 与原 egui 版的分工保持一致，只替换通信层：
-//! - `registry` / `zed` / `association` / `icon` / `refresh` 五个逻辑模块为纯 Rust，原样复用
+//! - `registry` / `zed` / `association` / `icon` / `refresh` 五个逻辑模块为纯 Rust
 //! - 原来的「后台线程 + mpsc GuiMessage」改为「async command + spawn_blocking + progress 事件」
 //! - 窗口关闭拦截：任务进行中时 `prevent_close` 并广播 `close-requested`，由前端弹确认框
 //!
 //! 前后端协议（camelCase）：
-//! - `initial_channel()` → 启动初始通道 key（stable / preview / nightly / zedg）
+//! - `bootstrap()` → { channel, autoSelected, zedPath, associations[], log[] }（启动一次到位）
 //! - `load_state(channel)` → { zedPath, associations[], log[] }
-//! - `apply_icons(targets, mode, zedPath, customDir)` / `remove_icons(targets)` → 过程发 `progress`
+//! - `apply_icons(targets, mode, zedPath, customDir)` / `remove_icons(targets)` → log[]
 //! - `refresh_explorer(clearCache, restartExplorer)` → log[]
+//! - `undo_status()` → { available, timestamp, action, count }；`undo_last()` → log[]
 //! - `scan_ico_count(dir)` / `confirm_quit()`
-
-// 保留与原版一致的工具函数与字段（create_key / refresh_full / current_icon 展示等）
-#![allow(dead_code)]
+//!
+//! 设计约定（详见 DESIGN.md D6/D7/D8/D19）：
+//! - **busy 由 RAII 守卫持有**，任何返回路径（含 `?` 提前返回、panic 展开）都会复位
+//! - **只读命令不置 busy**（读取不该阻塞关窗）
+//! - 写操作的**回退/失败明细经返回值交给前端**，不依赖控制台
 
 mod association;
 mod icon;
@@ -26,36 +29,73 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use association::FileAssociation;
-use icon::{IconMode, IconTarget};
+use icon::{IconMode, IconState, IconTarget};
 use zed::Channel;
 
 /// 跨 command 共享的状态
 struct AppState {
-    /// 是否有任务进行中（决定关闭窗口是否需要二次确认）
+    /// 是否有写操作进行中（决定关闭窗口是否需要二次确认）
     busy: Arc<AtomicBool>,
 }
 
-/// 日志行（error=true 时前端标红）
-#[derive(Serialize, Clone)]
-struct LogLineDto {
-    text: String,
-    error: bool,
-}
+/// busy 标志的 RAII 守卫
+///
+/// 早期实现把 `busy.store(false)` 写在 `spawn_blocking(...).await?` **之后**，
+/// 一旦 join 失败（任务 panic）就会提前返回、标志永久停留在 true，
+/// 此后每次关窗都会被 `prevent_close` 拦截。改用 Drop 复位后不再有该问题。
+struct BusyGuard(Arc<AtomicBool>);
 
-fn ok_line(text: impl Into<String>) -> LogLineDto {
-    LogLineDto {
-        text: text.into(),
-        error: false,
+impl BusyGuard {
+    /// 置忙并返回守卫；守卫析构时自动复位
+    fn acquire(flag: Arc<AtomicBool>) -> Self {
+        flag.store(true, Ordering::SeqCst);
+        Self(flag)
     }
 }
 
-fn err_line(text: impl Into<String>) -> LogLineDto {
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+/// 日志级别（前端据此着色：info 常规 / warn 注意 / error 失败）
+#[derive(Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum LogLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+/// 日志行（level 决定前端样式）
+#[derive(Serialize, Clone)]
+struct LogLineDto {
+    text: String,
+    level: LogLevel,
+}
+
+fn info(text: impl Into<String>) -> LogLineDto {
     LogLineDto {
         text: text.into(),
-        error: true,
+        level: LogLevel::Info,
+    }
+}
+
+fn warn(text: impl Into<String>) -> LogLineDto {
+    LogLineDto {
+        text: text.into(),
+        level: LogLevel::Warn,
+    }
+}
+
+fn error(text: impl Into<String>) -> LogLineDto {
+    LogLineDto {
+        text: text.into(),
+        level: LogLevel::Error,
     }
 }
 
@@ -66,8 +106,12 @@ struct AssociationDto {
     extension: String,
     prog_id: String,
     shared_prog_id: bool,
+    /// 同一 ProgID 还被哪些扩展名共用（影响面量化）
+    shared_with: Vec<String>,
     has_default_icon: bool,
     current_icon: Option<String>,
+    /// "none" | "valid" | "missing"
+    icon_state: IconState,
 }
 
 impl From<FileAssociation> for AssociationDto {
@@ -76,8 +120,10 @@ impl From<FileAssociation> for AssociationDto {
             extension: a.extension,
             prog_id: a.prog_id,
             shared_prog_id: a.shared_prog_id,
+            shared_with: a.shared_with,
             has_default_icon: a.has_default_icon,
             current_icon: a.current_icon,
+            icon_state: a.icon_state,
         }
     }
 }
@@ -91,10 +137,23 @@ struct LoadState {
     log: Vec<LogLineDto>,
 }
 
+/// 启动引导结果：通道选择 + 首次加载一次返回（省掉一次 IPC 往返）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BootstrapDto {
+    channel: String,
+    /// 是否由工具自动选择了非默认通道（前端据此决定是否提示）
+    auto_selected: bool,
+    zed_path: Option<String>,
+    associations: Vec<AssociationDto>,
+    log: Vec<LogLineDto>,
+}
+
 /// 批量操作进度事件负载（扩展名标签由后端带上）
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct ProgressPayload {
+    /// 当前正在处理的序号（从 1 开始）
     current: usize,
     total: usize,
     extension: String,
@@ -106,6 +165,9 @@ struct ProgressPayload {
 struct TargetDto {
     extension: String,
     prog_id: String,
+    /// 逐项指定的自定义图标（绝对路径，可空）
+    #[serde(default)]
+    custom_icon: Option<String>,
 }
 
 impl From<TargetDto> for IconTarget {
@@ -113,71 +175,192 @@ impl From<TargetDto> for IconTarget {
         Self {
             extension: t.extension,
             prog_id: t.prog_id,
+            custom_icon: t.custom_icon,
         }
     }
 }
 
-/// 通道 ↔ 稳定 ascii key（前后端以 key 通信，显示名只在前端用）
-fn channel_key(channel: Channel) -> &'static str {
-    match channel {
-        Channel::Stable => "stable",
-        Channel::Preview => "preview",
-        Channel::Nightly => "nightly",
-        Channel::Zedg => "zedg",
-    }
+/// 撤销快照：写入前记录的 DefaultIcon 原值
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UndoSnapshot {
+    /// Unix 秒
+    timestamp: u64,
+    /// "apply" | "remove"
+    action: String,
+    entries: Vec<UndoEntry>,
 }
 
-fn channel_from_key(key: &str) -> Result<Channel, String> {
-    match key {
-        "stable" => Ok(Channel::Stable),
-        "preview" => Ok(Channel::Preview),
-        "nightly" => Ok(Channel::Nightly),
-        "zedg" => Ok(Channel::Zedg),
-        other => Err(format!("未知通道：{other}")),
-    }
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UndoEntry {
+    prog_id: String,
+    extension: String,
+    /// 写入前的 DefaultIcon 值（None 表示原本没有）
+    previous: Option<String>,
 }
 
-/// 启动初始通道：优先「注册表里已有该通道 ProgID」，其次「检测到 exe」，兜底稳定版
-#[tauri::command]
-fn initial_channel() -> String {
-    if let Ok(subkeys) = registry::list_subkeys("") {
-        if let Some(channel) = Channel::ALL
-            .iter()
-            .copied()
-            .find(|c| subkeys.iter().any(|key| key.starts_with(c.prog_id_prefix())))
-        {
-            return channel_key(channel).to_string();
-        }
-    }
+/// 撤销可用性（前端启动时查询，用于决定按钮是否可点）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UndoStatusDto {
+    available: bool,
+    timestamp: Option<u64>,
+    action: Option<String>,
+    count: usize,
+}
+
+/// 撤销快照文件名（保存在应用数据目录）
+const UNDO_FILE: &str = "undo.json";
+
+/// 在阻塞池执行闭包，统一处理 join 失败
+///
+/// 注册表与文件系统操作一律经此进入后台线程（Tauri 主线程同步执行会冻结窗口）。
+async fn blocking<T, F>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|err| format!("后台任务异常：{err}"))?
+}
+
+/// 选择启动通道：① 注册表里已有该通道 ProgID ② 检测到 exe ③ 兜底稳定版
+fn select_channel(classes: &[String]) -> Channel {
     Channel::ALL
         .iter()
         .copied()
-        .find(|c| zed::detect_zed_path(*c).is_some())
+        .find(|c| {
+            let prefix = c.prog_id_prefix().to_ascii_lowercase();
+            classes
+                .iter()
+                .any(|key| key.to_ascii_lowercase().starts_with(&prefix))
+        })
+        .or_else(|| {
+            Channel::ALL
+                .iter()
+                .copied()
+                .find(|c| zed::detect_zed_path(*c).is_some())
+        })
         .unwrap_or(Channel::Stable)
-        .key_owned()
 }
 
-impl Channel {
-    /// 小工具：把 key 转成 String（避免在命令里写两遍 match）
-    fn key_owned(self) -> String {
-        channel_key(self).to_string()
+/// 同步加载结果：检测到的 Zed 路径、关联列表、日志
+struct Loaded {
+    zed_path: Option<String>,
+    associations: Vec<FileAssociation>,
+    log: Vec<LogLineDto>,
+}
+
+/// 同步加载：检测 Zed 路径 + 枚举关联（在阻塞池中调用）
+fn load_sync(channel: Channel) -> Result<Loaded, String> {
+    let mut log = Vec::new();
+
+    let zed_path = match zed::detect_zed_path(channel) {
+        Some(path) => {
+            log.push(info(format!("已检测到 Zed：{}", path.display())));
+            Some(path.display().to_string())
+        }
+        None => {
+            log.push(warn(format!(
+                "未检测到 {}（「Zed 应用图标」模式不可用，可手动指定路径）",
+                channel.display_name()
+            )));
+            None
+        }
+    };
+
+    let list =
+        association::list_associations(channel).map_err(|err| format!("加载关联列表失败：{err:#}"))?;
+    log.push(info(format!("已加载 {} 个文件关联", list.len())));
+
+    let invalid = list
+        .iter()
+        .filter(|a| a.icon_state == IconState::Missing)
+        .count();
+    if invalid > 0 {
+        log.push(warn(format!(
+            "其中 {invalid} 个关联的图标文件已失效（源文件已不存在），可一键修复"
+        )));
     }
+
+    Ok(Loaded {
+        zed_path,
+        associations: list,
+        log,
+    })
+}
+
+/// 启动引导：一次调用完成「选通道 + 检测 Zed + 枚举关联」
+#[tauri::command]
+async fn bootstrap() -> Result<BootstrapDto, String> {
+    blocking(move || {
+        // 全量枚举一次供通道判定；随后 list_associations 内部再枚举一次（约 3 ms）
+        let classes = registry::list_subkeys("").unwrap_or_default();
+        let channel = select_channel(&classes);
+        let auto_selected = channel != Channel::Stable;
+
+        let Loaded {
+            zed_path,
+            associations,
+            mut log,
+        } = load_sync(channel)?;
+        if auto_selected {
+            log.insert(
+                0,
+                info(format!("已自动选择通道：{}", channel.display_name())),
+            );
+        }
+
+        Ok(BootstrapDto {
+            channel: channel.as_key().to_string(),
+            auto_selected,
+            zed_path,
+            associations: associations.into_iter().map(Into::into).collect(),
+            log,
+        })
+    })
+    .await
+}
+
+/// 加载指定通道：检测 Zed 路径 + 枚举关联列表（只读，不置 busy）
+#[tauri::command]
+async fn load_state(channel: String) -> Result<LoadState, String> {
+    let channel = Channel::from_key(&channel).ok_or_else(|| format!("未知通道：{channel}"))?;
+
+    blocking(move || {
+        let Loaded {
+            zed_path,
+            associations,
+            log,
+        } = load_sync(channel)?;
+        Ok(LoadState {
+            zed_path,
+            associations: associations.into_iter().map(Into::into).collect(),
+            log,
+        })
+    })
+    .await
 }
 
 /// 扫描目录中的 .ico 文件数量（单层；目录未设置 / 不存在 / 读不到返回 None）
 #[tauri::command]
-fn scan_ico_count(dir: String) -> Option<usize> {
-    let trimmed = dir.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let path = std::path::Path::new(trimmed);
-    if !path.is_dir() {
-        return None;
-    }
-    let entries = std::fs::read_dir(path).ok()?;
-    Some(
-        entries
+async fn scan_ico_count(dir: String) -> Result<Option<usize>, String> {
+    blocking(move || {
+        let trimmed = dir.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        let path = PathBuf::from(trimmed);
+        if !path.is_dir() {
+            return Ok(None);
+        }
+        let entries = match std::fs::read_dir(&path) {
+            Ok(entries) => entries,
+            Err(_) => return Ok(None),
+        };
+        let count = entries
             .flatten()
             .filter(|entry| {
                 entry
@@ -186,52 +369,109 @@ fn scan_ico_count(dir: String) -> Option<usize> {
                     .map(|ext| ext.eq_ignore_ascii_case("ico"))
                     .unwrap_or(false)
             })
-            .count(),
-    )
-}
-
-/// 加载：检测 Zed 路径 + 枚举关联列表（后台线程执行，完成后一次性返回）
-#[tauri::command]
-async fn load_state(state: State<'_, AppState>, channel: String) -> Result<LoadState, String> {
-    let channel = channel_from_key(&channel)?;
-    let busy = state.busy.clone();
-    busy.store(true, Ordering::SeqCst);
-
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let mut log = Vec::new();
-        let zed_path = match zed::detect_zed_path(channel) {
-            Some(path) => {
-                log.push(ok_line(format!("已检测到 Zed：{}", path.display())));
-                Some(path.display().to_string())
-            }
-            None => {
-                log.push(ok_line(format!(
-                    "未检测到 {}（「Zed 应用图标」模式不可用）",
-                    channel.display_name()
-                )));
-                None
-            }
-        };
-        match association::list_associations(channel) {
-            Ok(list) => {
-                log.push(ok_line(format!("已加载 {} 个文件关联", list.len())));
-                Ok(LoadState {
-                    zed_path,
-                    associations: list.into_iter().map(Into::into).collect(),
-                    log,
-                })
-            }
-            Err(err) => Err(format!("加载关联列表失败：{err:#}")),
-        }
+            .count();
+        Ok(Some(count))
     })
     .await
-    .map_err(|err| format!("后台任务异常：{err}"))?;
-
-    busy.store(false, Ordering::SeqCst);
-    result
 }
 
-/// 批量写入图标（App / Custom / System 三种模式），逐项发 `progress` 事件
+/// 应用数据目录下的撤销快照路径（必要时创建目录）
+fn undo_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("无法定位应用数据目录：{err}"))?;
+    std::fs::create_dir_all(&dir).map_err(|err| format!("创建应用数据目录失败：{err}"))?;
+    Ok(dir.join(UNDO_FILE))
+}
+
+/// 写入撤销快照（覆盖上一次）
+fn save_undo(app: &AppHandle, snapshot: &UndoSnapshot) -> Result<(), String> {
+    let path = undo_path(app)?;
+    let json = serde_json::to_string_pretty(snapshot)
+        .map_err(|err| format!("序列化撤销快照失败：{err}"))?;
+    std::fs::write(&path, json).map_err(|err| format!("写入撤销快照失败：{err}"))
+}
+
+/// 读取撤销快照（不存在 / 损坏时返回 None）
+fn read_undo(app: &AppHandle) -> Option<UndoSnapshot> {
+    let path = undo_path(app).ok()?;
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// 删除撤销快照（撤销成功后调用，保证只能用一次）
+fn clear_undo(app: &AppHandle) {
+    if let Ok(path) = undo_path(app) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// 写前快照：记录每个目标当前的 DefaultIcon 原值
+fn capture_snapshot(targets: &[IconTarget], action: &str) -> UndoSnapshot {
+    let entries = targets
+        .iter()
+        .map(|target| {
+            let previous = registry::get_default_value(&format!("{}\\DefaultIcon", target.prog_id))
+                .ok()
+                .flatten();
+            UndoEntry {
+                prog_id: target.prog_id.clone(),
+                extension: target.extension.clone(),
+                previous,
+            }
+        })
+        .collect();
+
+    UndoSnapshot {
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        action: action.to_string(),
+        entries,
+    }
+}
+
+/// 操作名 → 中文（日志用）
+fn action_label(action: &str) -> &'static str {
+    match action {
+        "apply" => "应用图标",
+        "remove" => "恢复默认",
+        _ => "修改",
+    }
+}
+
+/// 提取适合展示的错误摘要（不经 `{:#}`，避免把调用链写进日志）
+fn short_reason(err: &anyhow::Error) -> String {
+    err.chain()
+        .next()
+        .map(|e| e.to_string())
+        .unwrap_or_else(|| "未知错误".to_string())
+}
+
+/// 把失败明细包成一条 error 日志
+fn failure_log(failures: &[(String, String)]) -> Option<LogLineDto> {
+    if failures.is_empty() {
+        return None;
+    }
+    let detail = failures
+        .iter()
+        .map(|(ext, reason)| format!("{ext}：{reason}"))
+        .collect::<Vec<_>>()
+        .join("；");
+    Some(error(format!("{} 项失败（{detail}）", failures.len())))
+}
+
+/// 广播系统刷新并把结果转成日志行（无副作用，写完必做）
+fn notify_log() -> LogLineDto {
+    match refresh::notify_system() {
+        Ok(()) => info("已通知系统刷新文件图标"),
+        Err(err) => warn(format!("广播关联变更失败：{err:#}")),
+    }
+}
+
+/// 批量写入图标（System / App / Custom，或逐项指定），逐项发 `progress` 事件
 #[tauri::command]
 async fn apply_icons(
     window: tauri::Window,
@@ -240,7 +480,7 @@ async fn apply_icons(
     mode: String,
     zed_path: String,
     custom_dir: Option<String>,
-) -> Result<(), String> {
+) -> Result<Vec<LogLineDto>, String> {
     let mode = match mode.as_str() {
         "system" => IconMode::System,
         "app" => IconMode::App,
@@ -255,38 +495,56 @@ async fn apply_icons(
     }
 
     let targets: Vec<IconTarget> = targets.into_iter().map(Into::into).collect();
-    let busy = state.busy.clone();
-    busy.store(true, Ordering::SeqCst);
+    let app = window.app_handle().clone();
+    let _guard = BusyGuard::acquire(state.busy.clone());
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let zed = PathBuf::from(&zed_path);
+    blocking(move || {
+        // 1. 写前快照（供「撤销上次操作」）
+        let snapshot = capture_snapshot(&targets, "apply");
+
+        // 2. 批量写入
+        let zed = PathBuf::from(zed_path.trim());
         let custom = custom_dir.map(PathBuf::from);
-        icon::batch_set_icons(
+        let report = icon::batch_set_icons(
             &targets,
             mode,
             &zed,
             custom.as_deref(),
-            |current, total| {
-                let extension = targets
-                    .get(current.saturating_sub(1))
-                    .map(|t| t.extension.clone())
-                    .unwrap_or_default();
-                let _ = window.emit(
+            |target, done, total| {
+                if let Err(err) = window.emit(
                     "progress",
                     ProgressPayload {
-                        current,
+                        current: done + 1,
                         total,
-                        extension,
+                        extension: target.extension.clone(),
                     },
-                );
+                ) {
+                    eprintln!("[警告] 发送进度事件失败：{err}");
+                }
             },
-        )
+        );
+
+        // 3. 组织日志（回退与失败明细必须让用户看到）
+        let mut log = vec![info(report.applied_summary("应用"))];
+        if let Some(text) = report.fallback_summary() {
+            log.push(warn(text));
+        }
+        if let Some(text) = report.failure_summary() {
+            log.push(error(text));
+        }
+
+        // 4. 仅有成功项时更新撤销快照
+        if report.applied > 0 {
+            if let Err(err) = save_undo(&app, &snapshot) {
+                log.push(warn(format!("撤销快照保存失败（不影响图标设置）：{err}")));
+            }
+        }
+
+        // 5. 自动通知 Shell 刷新（清缓存 / 重启 Explorer 仍由用户显式触发）
+        log.push(notify_log());
+        Ok(log)
     })
     .await
-    .map_err(|err| format!("后台任务异常：{err}"))?;
-
-    busy.store(false, Ordering::SeqCst);
-    result.map_err(|err| format!("{err:#}"))
 }
 
 /// 批量恢复默认（递归删除 `<ProgID>\DefaultIcon`），逐项发 `progress` 事件
@@ -295,74 +553,141 @@ async fn remove_icons(
     window: tauri::Window,
     state: State<'_, AppState>,
     targets: Vec<TargetDto>,
-) -> Result<(), String> {
+) -> Result<Vec<LogLineDto>, String> {
     if targets.is_empty() {
         return Err("没有可操作的扩展名".to_string());
     }
-    let targets: Vec<IconTarget> = targets.into_iter().map(Into::into).collect();
-    let busy = state.busy.clone();
-    busy.store(true, Ordering::SeqCst);
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        icon::batch_remove_icons(&targets, |current, total| {
-            let extension = targets
-                .get(current.saturating_sub(1))
-                .map(|t| t.extension.clone())
-                .unwrap_or_default();
-            let _ = window.emit(
+    let targets: Vec<IconTarget> = targets.into_iter().map(Into::into).collect();
+    let app = window.app_handle().clone();
+    let _guard = BusyGuard::acquire(state.busy.clone());
+
+    blocking(move || {
+        let snapshot = capture_snapshot(&targets, "remove");
+
+        let report = icon::batch_remove_icons(&targets, |target, done, total| {
+            if let Err(err) = window.emit(
                 "progress",
                 ProgressPayload {
-                    current,
+                    current: done + 1,
                     total,
-                    extension,
+                    extension: target.extension.clone(),
                 },
-            );
-        })
+            ) {
+                eprintln!("[警告] 发送进度事件失败：{err}");
+            }
+        });
+
+        let mut log = vec![info(report.applied_summary("恢复默认图标"))];
+        if let Some(text) = report.failure_summary() {
+            log.push(error(text));
+        }
+
+        if report.applied > 0 {
+            if let Err(err) = save_undo(&app, &snapshot) {
+                log.push(warn(format!("撤销快照保存失败（不影响图标恢复）：{err}")));
+            }
+        }
+
+        log.push(notify_log());
+        Ok(log)
     })
     .await
-    .map_err(|err| format!("后台任务异常：{err}"))?;
-
-    busy.store(false, Ordering::SeqCst);
-    result.map_err(|err| format!("{err:#}"))
 }
 
-/// 刷新资源管理器：广播变更（必做）→（可选）清缓存 →（可选）重启 explorer
-///
-/// 返回逐条日志；单步失败不中断后续步骤。
+/// 刷新资源管理器：通知 →〔清缓存〕→〔重启〕；单步失败不中断后续步骤
 #[tauri::command]
 async fn refresh_explorer(
     state: State<'_, AppState>,
     clear_cache: bool,
     restart_explorer: bool,
 ) -> Result<Vec<LogLineDto>, String> {
-    let busy = state.busy.clone();
-    busy.store(true, Ordering::SeqCst);
+    let _guard = BusyGuard::acquire(state.busy.clone());
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    blocking(move || {
         let mut log = Vec::new();
         match refresh::notify_system() {
-            Ok(()) => log.push(ok_line("已广播文件关联变更通知")),
-            Err(err) => log.push(err_line(format!("广播关联变更失败：{err:#}"))),
+            Ok(()) => log.push(info("已广播文件关联变更通知")),
+            Err(err) => log.push(error(format!("广播关联变更失败：{err:#}"))),
         }
         if clear_cache {
             match refresh::clear_icon_cache() {
-                Ok(()) => log.push(ok_line("图标缓存清理完成")),
-                Err(err) => log.push(err_line(format!("清理图标缓存失败：{err:#}"))),
+                Ok(()) => log.push(info("图标缓存清理完成")),
+                Err(err) => log.push(error(format!("清理图标缓存失败：{err:#}"))),
             }
         }
         if restart_explorer {
             match refresh::restart_explorer() {
-                Ok(()) => log.push(ok_line("Explorer 已重启")),
-                Err(err) => log.push(err_line(format!("重启 Explorer 失败：{err:#}"))),
+                Ok(()) => log.push(info("Explorer 已重启")),
+                Err(err) => log.push(error(format!("重启 Explorer 失败：{err:#}"))),
             }
         }
-        log
+        Ok(log)
     })
     .await
-    .map_err(|err| format!("后台任务异常：{err}"))?;
+}
 
-    busy.store(false, Ordering::SeqCst);
-    Ok(result)
+/// 查询是否存在可撤销的快照
+#[tauri::command]
+async fn undo_status(app: AppHandle) -> Result<UndoStatusDto, String> {
+    blocking(move || {
+        Ok(match read_undo(&app) {
+            Some(snapshot) => UndoStatusDto {
+                available: !snapshot.entries.is_empty(),
+                timestamp: Some(snapshot.timestamp),
+                action: Some(snapshot.action),
+                count: snapshot.entries.len(),
+            },
+            None => UndoStatusDto {
+                available: false,
+                timestamp: None,
+                action: None,
+                count: 0,
+            },
+        })
+    })
+    .await
+}
+
+/// 撤销上一次写入：按快照恢复 DefaultIcon（快照只能使用一次）
+#[tauri::command]
+async fn undo_last(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<LogLineDto>, String> {
+    let _guard = BusyGuard::acquire(state.busy.clone());
+
+    blocking(move || {
+        let snapshot = read_undo(&app).ok_or_else(|| "没有可撤销的操作".to_string())?;
+        if snapshot.entries.is_empty() {
+            clear_undo(&app);
+            return Err("没有可撤销的操作".to_string());
+        }
+
+        let mut restored = 0usize;
+        let mut failures: Vec<(String, String)> = Vec::new();
+        for entry in &snapshot.entries {
+            let key = format!("{}\\DefaultIcon", entry.prog_id);
+            let result = match &entry.previous {
+                Some(value) => registry::set_default_value(&key, value),
+                None => registry::delete_key(&key),
+            };
+            match result {
+                Ok(()) => restored += 1,
+                Err(err) => failures.push((entry.extension.clone(), short_reason(&err))),
+            }
+        }
+
+        clear_undo(&app);
+
+        let mut log = vec![info(format!(
+            "已撤销上次「{}」操作，恢复 {restored} 项",
+            action_label(&snapshot.action)
+        ))];
+        if let Some(line) = failure_log(&failures) {
+            log.push(line);
+        }
+        log.push(notify_log());
+        Ok(log)
+    })
+    .await
 }
 
 /// 用户已确认「任务进行中退出」：清 busy 标志并直接销毁窗口
@@ -370,6 +695,53 @@ async fn refresh_explorer(
 fn confirm_quit(window: tauri::Window, state: State<'_, AppState>) {
     state.busy.store(false, Ordering::SeqCst);
     let _ = window.destroy();
+}
+
+/// 预设文件大小上限（1 MiB）：预设是纯文本配置，不该更大
+const PRESET_MAX_BYTES: u64 = 1024 * 1024;
+
+/// 校验预设文件路径（限定 .json，避免被当作任意文件读写通道）
+fn preset_path(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("未选择文件".to_string());
+    }
+    let path = PathBuf::from(trimmed);
+    let is_json = path
+        .extension()
+        .map(|ext| ext.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+    if !is_json {
+        return Err("预设文件必须是 .json".to_string());
+    }
+    Ok(path)
+}
+
+/// 保存预设文件（路径由前端文件对话框选定，仅接受 .json）
+#[tauri::command]
+async fn save_preset_file(path: String, content: String) -> Result<(), String> {
+    blocking(move || {
+        let path = preset_path(&path)?;
+        std::fs::write(&path, content).map_err(|err| format!("写入预设失败：{err}"))
+    })
+    .await
+}
+
+/// 读取预设文件（仅接受 .json，且限制大小）
+#[tauri::command]
+async fn load_preset_file(path: String) -> Result<String, String> {
+    blocking(move || {
+        let path = preset_path(&path)?;
+        let meta = std::fs::metadata(&path).map_err(|err| format!("无法读取预设文件：{err}"))?;
+        if meta.len() > PRESET_MAX_BYTES {
+            return Err(format!(
+                "预设文件过大（{} KiB，上限 1 MiB）",
+                meta.len() / 1024
+            ));
+        }
+        std::fs::read_to_string(&path).map_err(|err| format!("读取预设失败：{err}"))
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -381,12 +753,16 @@ pub fn run() {
             busy: Arc::new(AtomicBool::new(false)),
         })
         .invoke_handler(tauri::generate_handler![
-            initial_channel,
-            scan_ico_count,
+            bootstrap,
             load_state,
+            scan_ico_count,
             apply_icons,
             remove_icons,
             refresh_explorer,
+            undo_status,
+            undo_last,
+            save_preset_file,
+            load_preset_file,
             confirm_quit
         ])
         .on_window_event(|window, event| {
@@ -401,4 +777,51 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 通道选择：注册表里已有 ProgID 的通道优先
+    #[test]
+    fn channel_selection_prefers_existing_prog_id() {
+        let classes = vec![
+            "ZedG.md".to_string(),
+            "ZedG.rs".to_string(),
+            ".py".to_string(),
+        ];
+        assert_eq!(select_channel(&classes), Channel::Zedg);
+
+        let stable = vec!["Zed.py".to_string(), "ZedG.md".to_string()];
+        assert_eq!(select_channel(&stable), Channel::Stable);
+
+        // 空注册表：退化为「检测到 exe」或兜底，不应 panic
+        let empty: Vec<String> = Vec::new();
+        let _ = select_channel(&empty);
+    }
+
+    /// 大小写不敏感：大写 ProgID 也能命中通道前缀
+    #[test]
+    fn channel_selection_case_insensitive() {
+        let classes = vec!["ZEDG.MD".to_string()];
+        assert_eq!(select_channel(&classes), Channel::Zedg);
+    }
+
+    /// 操作名到中文标签
+    #[test]
+    fn action_labels() {
+        assert_eq!(action_label("apply"), "应用图标");
+        assert_eq!(action_label("remove"), "恢复默认");
+        assert_eq!(action_label("whatever"), "修改");
+    }
+
+    /// 失败明细汇总成单条日志
+    #[test]
+    fn failure_logging() {
+        assert!(failure_log(&[]).is_none());
+        let line = failure_log(&[("rs".to_string(), "键不存在".to_string())]).unwrap();
+        assert!(line.text.contains("rs") && line.text.contains("键不存在"));
+        assert!(matches!(line.level, LogLevel::Error));
+    }
 }

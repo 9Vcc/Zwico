@@ -6,6 +6,9 @@
 //! - **错误转换**：将 windows-registry 的底层错误统一转换为带中文上下文的
 //!   `anyhow::Error`
 //!
+//! 对外五个函数：`get_default_value` / `set_default_value` / `delete_key` /
+//! `key_exists` / `list_subkeys`（原 `create_key` 无调用方，已移除）。
+//!
 //! 文件关联在注册表中的典型结构（路径均相对 `HKCU\Software\Classes`）：
 //!
 //! ```text
@@ -80,14 +83,6 @@ pub fn set_default_value(path: &str, value: &str) -> Result<()> {
     // 空名称 "" 即默认值
     key.set_string("", value)
         .map_err(|err| reg_error(path, err))
-}
-
-/// 创建指定键（已存在时等同成功，含所有中间层级）
-pub fn create_key(path: &str) -> Result<()> {
-    CURRENT_USER
-        .create(full_path(path))
-        .map_err(|err| reg_error(path, err))?;
-    Ok(())
 }
 
 /// 删除指定键及其全部子键（递归删除，用于清理 ProgID 整棵键树）

@@ -121,23 +121,6 @@ pub fn restart_explorer() -> Result<()> {
     Ok(())
 }
 
-/// 完整刷新流程：广播关联变更 → 清理图标缓存 → 重启资源管理器
-pub fn refresh_full() -> Result<()> {
-    println!("[刷新] === 开始完整刷新 ===");
-
-    // 1. 广播关联变更通知
-    notify_system()?;
-
-    // 2. 清理图标缓存（尽力而为，不因个别文件被占用而中断）
-    clear_icon_cache()?;
-
-    // 3. 重启资源管理器，强制重建图标缓存
-    restart_explorer()?;
-
-    println!("[刷新] === 完整刷新完成 ===");
-    Ok(())
-}
-
 /// 尝试删除单个文件
 ///
 /// - `Ok(true)`：删除成功

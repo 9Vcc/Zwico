@@ -10,12 +10,19 @@
 //!
 //! 本模块按「扩展名 → 实际生效 ProgID」枚举（UserChoice 优先，覆盖各种
 //! ProgID 形态），并补充枚举通道自有前缀的 ProgID 键，按扩展名去重合并。
+//!
+//! 实现要点：
+//! - `Software\Classes` 的**全量子键只枚举一次**，两个来源共用（原实现枚举两次）
+//! - 注册表键名**大小写不敏感**，因此所有比较、去重、前缀匹配统一按小写进行
+//!   （实测 Windows 上确实存在 `.WPL`、`.TS` 这类大写键名）
+//! - 展示用扩展名统一归一化为小写，注册表访问仍使用原始键名
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use windows_registry::CURRENT_USER;
 
+use crate::icon::{self, IconState};
 use crate::registry;
 use crate::zed::Channel;
 
@@ -25,82 +32,126 @@ const FILE_EXTS_ROOT: &str = r"Software\Microsoft\Windows\CurrentVersion\Explore
 /// 单个文件关联的描述信息
 #[derive(Debug, Clone)]
 pub struct FileAssociation {
-    /// 扩展名（不带点，如 "md"）
+    /// 扩展名（不带点、已转小写，如 "md"）
     pub extension: String,
     /// 实际生效的 ProgID（如 "ZedG.md"、"Applications\ZedG.exe"、"md_auto_file"）
     pub prog_id: String,
     /// ProgID 是否为跨扩展名共享（`Applications\*` 形态：
     /// 所有通过「打开方式」关联到同一程序的扩展名共用图标）
     pub shared_prog_id: bool,
+    /// 同一 ProgID 还被**哪些其他扩展名**共用（用于量化「本次修改会影响谁」）
+    pub shared_with: Vec<String>,
     /// 是否存在 DefaultIcon 子键
     pub has_default_icon: bool,
     /// DefaultIcon 的当前值（None 表示键不存在或未设置默认值）
     pub current_icon: Option<String>,
+    /// 当前图标的可达性（已设置但文件不存在 → Missing，前端标「失效」）
+    pub icon_state: IconState,
 }
 
 /// 列出当前关联到指定通道 Zed 的全部文件扩展名
 pub fn list_associations(channel: Channel) -> Result<Vec<FileAssociation>> {
+    // `Software\Classes` 全量子键只读一次，供两个来源共用
+    let classes = registry::list_subkeys("")?;
+
     // 源 A：从扩展名键出发，解析实际生效的关联（覆盖各种 ProgID 形态）
-    let mut associations = list_effective_associations(channel)?;
-    let known: HashSet<String> = associations.iter().map(|a| a.extension.clone()).collect();
+    let mut associations = list_effective_associations(channel, &classes);
 
     // 源 B：通道自有前缀的 ProgID 键（可能存在但尚未设为默认打开方式）补充
-    let prefix = channel.prog_id_prefix();
-    for prog_id in registry::list_subkeys("")? {
-        let Some(extension) = prog_id.strip_prefix(prefix) else {
+    let prefix = channel.prog_id_prefix().to_ascii_lowercase();
+    let mut known: HashSet<String> = associations.iter().map(|a| a.extension.clone()).collect();
+    for prog_id in &classes {
+        let Some(extension) = prog_id
+            .to_ascii_lowercase()
+            .strip_prefix(&prefix)
+            .map(str::to_owned)
+        else {
             continue;
         };
         // 跳过空扩展名与 "ZedG.py.1" 这类带版本号的 COM 风格 ProgID
         if extension.is_empty() || extension.contains('.') {
             continue;
         }
-        if known.contains(extension) {
+        if !known.insert(extension.clone()) {
             continue; // 源 A 已收录（实际生效），跳过
         }
-        associations.push(build_association(extension, &prog_id));
+        associations.push(build_association(&extension, prog_id));
     }
 
     // 按扩展名排序，保证列表顺序稳定
     associations.sort_by(|a, b| a.extension.cmp(&b.extension));
+
+    // 影响面：统计每个 ProgID 实际被哪些扩展名共用
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+    for assoc in &associations {
+        groups
+            .entry(assoc.prog_id.to_ascii_lowercase())
+            .or_default()
+            .push(assoc.extension.clone());
+    }
+    for assoc in &mut associations {
+        let mut others = groups
+            .get(&assoc.prog_id.to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_default();
+        others.retain(|ext| ext != &assoc.extension);
+        assoc.shared_with = others;
+    }
+
+    let invalid = associations
+        .iter()
+        .filter(|a| a.icon_state == IconState::Missing)
+        .count();
     println!(
-        "[关联] 通道 {}（前缀 {prefix}）共发现 {} 个关联",
+        "[关联] 通道 {}（前缀 {prefix}）共发现 {} 个关联{}",
         channel.display_name(),
-        associations.len()
+        associations.len(),
+        if invalid > 0 {
+            format!("，其中 {invalid} 个图标已失效")
+        } else {
+            String::new()
+        }
     );
     Ok(associations)
 }
 
 /// 源 A：遍历扩展名键，解析实际生效的 ProgID 并筛选出属于本通道的关联
-fn list_effective_associations(channel: Channel) -> Result<Vec<FileAssociation>> {
+///
+/// 注册表访问本身不会失败（`effective_prog_id` 逐项容错），因此返回 Vec 而非 Result。
+fn list_effective_associations(channel: Channel, classes: &[String]) -> Vec<FileAssociation> {
     let mut result = Vec::new();
 
-    for key_name in registry::list_subkeys("")? {
+    for key_name in classes {
         // 只处理扩展名键（"." 开头），如 ".md"
-        let Some(extension) = key_name.strip_prefix('.') else {
+        let Some(raw_extension) = key_name.strip_prefix('.') else {
             continue;
         };
-        if extension.is_empty() || extension.contains('.') {
+        if raw_extension.is_empty() || raw_extension.contains('.') {
             continue; // 跳过异常扩展名
         }
+        let extension = raw_extension.to_ascii_lowercase();
 
         // 解析实际生效的 ProgID（UserChoice 优先，扩展名键默认值后备）
-        let Some(prog_id) = effective_prog_id(&key_name) else {
+        let Some(prog_id) = effective_prog_id(key_name) else {
             continue;
         };
         if !channel.owns_prog_id(&prog_id) {
             continue;
         }
 
-        result.push(build_association(extension, &prog_id));
+        result.push(build_association(&extension, &prog_id));
     }
 
-    Ok(result)
+    result
 }
 
 /// 解析扩展名的实际生效 ProgID
 ///
 /// 优先级：`FileExts\<ext>\UserChoice`（Explorer 双击实际使用，含签名校验，
 /// 程序只能读取）→ `Software\Classes\<ext>` 默认值（传统关联方式）。
+///
+/// 注意：注册表路径大小写不敏感，`ext_key` 使用原始键名即可命中
+/// `FileExts` 下大小写不同名的子键。
 fn effective_prog_id(ext_key: &str) -> Option<String> {
     // 1. UserChoice
     let user_choice = format!(r"{FILE_EXTS_ROOT}\{ext_key}\UserChoice");
@@ -116,11 +167,65 @@ fn effective_prog_id(ext_key: &str) -> Option<String> {
 /// 构造关联条目：读取 ProgID 的 DefaultIcon 状态（尽力而为，失败按未设置处理）
 fn build_association(extension: &str, prog_id: &str) -> FileAssociation {
     let icon_key = format!("{prog_id}\\DefaultIcon");
+    let has_default_icon = registry::key_exists(&icon_key).unwrap_or(false);
+    let current_icon = registry::get_default_value(&icon_key).ok().flatten();
+    let icon_state = current_icon
+        .as_deref()
+        .map(icon::inspect_icon_value)
+        .unwrap_or(IconState::None);
+
     FileAssociation {
         extension: extension.to_string(),
-        shared_prog_id: prog_id.starts_with("Applications\\"),
-        has_default_icon: registry::key_exists(&icon_key).unwrap_or(false),
-        current_icon: registry::get_default_value(&icon_key).ok().flatten(),
         prog_id: prog_id.to_string(),
+        shared_prog_id: prog_id.starts_with("Applications\\"),
+        shared_with: Vec::new(), // 由 list_associations 统一回填
+        has_default_icon,
+        current_icon,
+        icon_state,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 关联条目构造：共享形态识别与失效判定
+    #[test]
+    fn association_shape() {
+        let shared = build_association("md", r"Applications\ZedG.exe");
+        assert!(shared.shared_prog_id);
+        assert!(!shared.has_default_icon || shared.current_icon.is_some());
+
+        let per_ext = build_association("rs", "Zed.rs");
+        assert!(!per_ext.shared_prog_id);
+        assert_eq!(per_ext.extension, "rs");
+    }
+
+    /// 大小写归一化：大写键名产出的扩展名必须是小写，避免与源 B 去重失配
+    #[test]
+    fn extension_key_normalization() {
+        // 模拟 classes 列表中的大写键
+        let classes = [".TS".to_string(), ".WPL".to_string()];
+        let normalized: Vec<String> = classes
+            .iter()
+            .filter_map(|k| k.strip_prefix('.'))
+            .map(|e| e.to_ascii_lowercase())
+            .collect();
+        assert_eq!(normalized, vec!["ts".to_string(), "wpl".to_string()]);
+    }
+
+    /// 源自检：本机枚举不应 panic，且扩展名全部为小写、无前导点
+    #[test]
+    fn listed_associations_are_normalized() {
+        for channel in Channel::ALL {
+            if let Ok(list) = list_associations(channel) {
+                for assoc in &list {
+                    assert!(!assoc.extension.starts_with('.'), "{}", assoc.extension);
+                    assert_eq!(assoc.extension, assoc.extension.to_ascii_lowercase());
+                    // shared_with 不应包含自身
+                    assert!(!assoc.shared_with.contains(&assoc.extension));
+                }
+            }
+        }
     }
 }

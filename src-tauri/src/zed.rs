@@ -76,6 +76,21 @@ impl Channel {
         }
     }
 
+    /// 前后端通信用的稳定 ascii key（显示名只在前端用）
+    pub fn as_key(self) -> &'static str {
+        match self {
+            Channel::Stable => "stable",
+            Channel::Preview => "preview",
+            Channel::Nightly => "nightly",
+            Channel::Zedg => "zedg",
+        }
+    }
+
+    /// 由稳定 key 反解通道（未知 key 返回 None）
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.as_key() == key)
+    }
+
     /// scoop 包名（无官方 scoop 包的通道返回 None）
     pub fn scoop_app_name(&self) -> Option<&'static str> {
         match self {
@@ -92,14 +107,18 @@ impl Channel {
     /// 2. ProgID 是「打开方式」注册的 Applications 形态（如 `Applications\ZedG.exe`）
     /// 3. ProgID 的 `shell\open\command` 指向本通道的可执行文件
     ///    （覆盖 `md_auto_file` 这类由系统命名的任意 ProgID）
+    ///
+    /// 注册表键名**大小写不敏感**，因此三条规则一律按小写形式比较
+    /// （实测 Windows 上存在 `.TS`、`.WPL` 这类大写键名，早期版本按区分大小写比较会漏项）。
     pub fn owns_prog_id(&self, prog_id: &str) -> bool {
+        let lower = prog_id.to_ascii_lowercase();
         // 规则 1：自有前缀
-        if prog_id.starts_with(self.prog_id_prefix()) {
+        if lower.starts_with(&self.prog_id_prefix().to_ascii_lowercase()) {
             return true;
         }
-        // 规则 2：Applications\<exe 名>（大小写不敏感）
-        let applications_key = format!("Applications\\{}", self.exe_name());
-        if prog_id.eq_ignore_ascii_case(&applications_key) {
+        // 规则 2：Applications\<exe 名>
+        let applications_key = format!("Applications\\{}", self.exe_name()).to_ascii_lowercase();
+        if lower == applications_key {
             return true;
         }
         // 规则 3：打开命令包含本通道 exe 文件名
@@ -292,6 +311,35 @@ mod tests {
         assert_eq!("Zed.py".strip_prefix("Zed."), Some("py"));
         assert!("ZedPreview.py".strip_prefix("Zed.").is_none());
         assert!("ZedG.py".strip_prefix("Zed.").is_none());
+    }
+
+    /// 通道 key 往返：前后端以 key 通信，必须一一对应且唯一
+    #[test]
+    fn channel_key_roundtrip() {
+        let mut keys: Vec<&str> = Channel::ALL.iter().map(|c| c.as_key()).collect();
+        assert_eq!(keys.len(), Channel::ALL.len());
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), Channel::ALL.len(), "通道 key 必须唯一");
+        for channel in Channel::ALL {
+            assert_eq!(Channel::from_key(channel.as_key()), Some(channel));
+        }
+        assert_eq!(Channel::from_key("unknown"), None);
+    }
+
+    /// 归属判定大小写不敏感：注册表键名不区分大小写，大写键名同样归属本通道
+    #[test]
+    fn owns_prog_id_case_insensitive() {
+        let zedg = Channel::Zedg;
+        // 规则 1：自有前缀
+        assert!(zedg.owns_prog_id("ZedG.md"));
+        assert!(zedg.owns_prog_id("zedg.MD"));
+        assert!(zedg.owns_prog_id("ZEDG.RS"));
+        // 规则 2：Applications 形态
+        assert!(zedg.owns_prog_id(r"applications\ZEDG.EXE"));
+        // 前缀不串通道（字符串判定）
+        assert!(!Channel::Stable.owns_prog_id("ZedG.md"));
+        assert!(!Channel::Preview.owns_prog_id("ZedNightly.md"));
     }
 
     /// 本机 scoop shim 解析（依赖实际安装，仅在存在时通过）
