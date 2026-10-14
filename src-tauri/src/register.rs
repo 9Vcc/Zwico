@@ -11,7 +11,7 @@
 //!
 //! ```text
 //! .py                          默认值 = ZedG.py      ← 建立关联
-//! ZedG.py                      默认值 = ZedG.py      ← 类型描述（"类型"列显示）
+//! ZedG.py                      默认值 = "PY 文件"    ← 类型描述（"类型"列显示）
 //! ZedG.py\shell\open\command   默认值 = "<zed.exe>" "%1"
 //! ```
 
@@ -41,6 +41,18 @@ pub fn is_valid_extension(extension: &str) -> bool {
 /// 本通道下该扩展名应使用的 ProgID
 pub fn prog_id_for(channel: Channel, extension: &str) -> String {
     format!("{}{}", channel.prog_id_prefix(), normalize_extension(extension))
+}
+
+/// ProgID 的类型描述（资源管理器「类型」列显示的文案）
+///
+/// 旧实现把 ProgID 名本身当描述写入（默认值 = `ZedG.json`），系统在「类型」列
+/// 原样显示 `ZedG.json`，不如系统自有关联的「GITIGNORE 文件」友好。这里生成
+/// `"<大写扩展名> 文件"`（如 `JSON 文件`），与 Windows 中文语境的惯用格式一致。
+///
+/// 语言说明：该值写在注册表里、由系统直接显示，不经前端 i18n；与托盘菜单
+/// （`lib.rs` setup）同理属系统级 UI，按主语言硬编码中文，不随应用语言切换。
+pub fn prog_id_description(extension: &str) -> String {
+    format!("{} 文件", normalize_extension(extension).to_ascii_uppercase())
 }
 
 // ---------- 应用注册（仅 zedg 通道）----------
@@ -125,8 +137,8 @@ pub fn register_application(
             &prog_id,
         )?;
 
-        // 2b. ProgID（图标与打开命令）
-        registry::set_default_value(&prog_id, &prog_id)?;
+        // 2b. ProgID（类型描述 + 图标 + 打开命令）
+        registry::set_default_value(&prog_id, &prog_id_description(&ext))?;
         registry::set_default_value(&format!("{prog_id}\\DefaultIcon"), &icon)?;
         registry::set_default_value(&format!("{prog_id}\\shell\\open\\command"), &command)?;
 
@@ -277,6 +289,15 @@ mod tests {
         assert_eq!(prog_id_for(Channel::Stable, "py"), "Zed.py");
         assert_eq!(prog_id_for(Channel::Zedg, ".MD"), "ZedG.md");
         assert_eq!(prog_id_for(Channel::Preview, "rs"), "ZedPreview.rs");
+    }
+
+    /// 类型描述 =「大写扩展名 + 文件」（回归：曾写成 ProgID 名，
+    /// 资源管理器「类型」列显示 ZedG.json）
+    #[test]
+    fn prog_id_description_is_friendly() {
+        assert_eq!(prog_id_description("json"), "JSON 文件");
+        assert_eq!(prog_id_description(".Ts"), "TS 文件");
+        assert_eq!(prog_id_description("GitIgnore"), "GITIGNORE 文件");
     }
 
     /// 前缀比较对非 ASCII 键名安全（回归：曾因字节切片 panic）

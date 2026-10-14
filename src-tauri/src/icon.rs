@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 
-use crate::register::prog_id_for;
+use crate::register::{prog_id_description, prog_id_for};
 use crate::registry;
 use crate::zed::Channel;
 use crate::text::encoded_str;
@@ -378,7 +378,7 @@ pub fn set_icon(
     if target.prog_id.starts_with("Applications\\") {
         let independent = prog_id_for(channel, &extension);
         let command = format!("\"{}\" \"%1\"", zed_path.display());
-        registry::set_default_value(&independent, &independent)?;
+        registry::set_default_value(&independent, &prog_id_description(&extension))?;
         registry::set_default_value(&format!("{independent}\\DefaultIcon"), &outcome.value)?;
         registry::set_default_value(
             &format!("{independent}\\shell\\open\\command"),

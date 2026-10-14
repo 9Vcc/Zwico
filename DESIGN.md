@@ -396,7 +396,9 @@ Tauri 侧基线：窗口是 WebView2（Win11 自带运行时）；关闭窗口 =
 「实际生效 ProgID」，于是 yaml.ico 被写到了共享 ProgID 上，所有共享扩展名一起变图。
 
 **修复（图标不再写共享 ProgID）**：`set_icon` 检测 `Applications\` 前缀 → 图标写到
-**按扩展名独立**的 `ZedG.<ext>` ProgID（完整结构：类型描述 + DefaultIcon + 打开命令），
+**按扩展名独立**的 `ZedG.<ext>` ProgID（完整结构：类型描述 + DefaultIcon + 打开命令；
+类型描述写 `"<大写扩展名> 文件"`（如 `JSON 文件`），供资源管理器「类型」列显示 ——
+曾误写成 ProgID 名导致显示 `ZedG.json`，重新应用注册/图标即自动修复存量），
 **完全跳过**对共享 ProgID 的 DefaultIcon 写入；`BatchReport.migrated` 记录这类扩展名，
 apply 汇总提示用户到系统设置重新设为默认。
 
